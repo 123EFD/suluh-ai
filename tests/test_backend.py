@@ -25,7 +25,14 @@ class TestBackendArchitecture(unittest.TestCase):
     def test_fastapi_route_registration(self):
         """Ensure critical API endpoints are correctly mounted on the FastAPI app instance."""
         import main
-        routes = [route.path for route in main.app.routes]
+        routes = []
+        for r in main.app.routes:
+            if hasattr(r, "path"):
+                routes.append(r.path)
+            elif hasattr(r, "routes"):
+                for sub_r in getattr(r, "routes", []):
+                    if hasattr(sub_r, "path"):
+                        routes.append(sub_r.path)
 
         critical_endpoints = [
             "/",
