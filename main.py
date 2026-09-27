@@ -229,7 +229,7 @@ class LearningResource(BaseModel):
 print("Loading model and scaler...")
 try:
     model = ResourcePredictorMLP()
-    model.load_state_dict(torch.load('resource_predictor.pth', map_location=torch.device('cpu')))
+    model.load_state_dict(torch.load('resource_predictor.pth', map_location=torch.device('cpu'), weights_only=True))
     model.eval() # Turn off dropout for predictions
     
     scaler = joblib.load('student_scaler.pkl')
@@ -369,7 +369,7 @@ def fetch_and_store_yt_videos(course_code: str) -> Optional[LearningResource]:
     
     response = None
     try:
-        response = requests.get(url, params=params)
+        response = requests.get(url, params=params, timeout=10)
         
         if response.status_code != 200:
             print(f"❌ YouTube API Rejected the Request! Status Code: {response.status_code}")
@@ -567,7 +567,7 @@ question_cache = {}
 def generate_cache_key(pdf_name: str, question: str) -> str:
     """Creates a unique ID for a specific question on a specific PDF."""
     unique_string = f"{pdf_name}_{question.strip().lower()}"
-    return hashlib.md5(unique_string.encode()).hexdigest()
+    return hashlib.md5(unique_string.encode(), usedforsecurity=False).hexdigest()
     
 def get_all_prerequisites(course_id, visited=None):
     if visited is None:
@@ -1991,8 +1991,10 @@ def resolve_course_pdf(req: ResolveCoursePdfRequest):
         
         try:
             print(f"Retrieving online academic PDF for {code} from {download_url}...")
+            if not download_url.startswith(("http://", "https://")):
+                raise ValueError("Insecure or unsupported URL scheme")
             req_dl = urllib.request.Request(download_url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req_dl, timeout=20) as resp, open(dest_path, 'wb') as out_f:
+            with urllib.request.urlopen(req_dl, timeout=20) as resp, open(dest_path, 'wb') as out_f:  # nosec B310
                 out_f.write(resp.read())
             print(f"Downloaded and saved to {dest_path}")
             

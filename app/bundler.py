@@ -142,7 +142,7 @@ def create_bundle(req: BundleRequest):
         FROM micro_resources 
         WHERE topic IN ({placeholders}) 
         ORDER BY RANDOM();
-    """
+    """  # nosec B608
     sqlite_cur.execute(sql, allowed_topics)
     sqlite_candidates = sqlite_cur.fetchall()
 
@@ -169,7 +169,7 @@ def create_bundle(req: BundleRequest):
                 WHERE topic IN ({p_placeholders})
                 ORDER BY RANDOM()
                 LIMIT 6;
-            """
+            """  # nosec B608
             sqlite_cur.execute(sql_prereq, p_allowed)
             prereq_items = sqlite_cur.fetchall()
             for p_item in prereq_items:

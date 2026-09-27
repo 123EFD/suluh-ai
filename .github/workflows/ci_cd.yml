@@ -79,7 +79,7 @@ jobs:
       - name: SAST Security Scan with Bandit
         run: |
           echo "Scanning Python codebase for common security vulnerabilities..."
-          bandit -r . -ll -x "./venv,./recommender_api,./tests"
+          bandit -r . -ll -x "./venv,./recommender_api,./tests,./.kilo"
 
       - name: Dependency Vulnerability Audit with pip-audit
         run: |
