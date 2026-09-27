@@ -1,0 +1,22 @@
+[allowlist]
+description = "Allowlist for Flutter build artifacts, test fixtures, documentation examples, and mock CI keys"
+paths = [
+  '''recommender_api/\.dart_tool/''',
+  '''recommender_api/build/''',
+  '''^uploads/''',
+  '''\.pdf$''',
+  '''\.dill$''',
+  '''\.log$''',
+  '''\.sarif$''',
+  '''resources\.db$''',
+  '''\.pth$''',
+  '''\.pkl$''',
+  '''tests/'''
+]
+regexes = [
+  '''dummy_ci_key''',
+  '''ci_dummy''',
+  '''AIzaSy\.\.\.''',
+  '''PlaywriteSK''',
+  '''6Lf39AMTAAAAALPbLZdcrWDa8Ygmgk_fmGmrlRog'''
+]

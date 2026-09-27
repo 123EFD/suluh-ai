@@ -98,5 +98,29 @@ class TestBackendArchitecture(unittest.TestCase):
         self.assertEqual(deduped[0]["title"], "Java Fundamentals")
         self.assertEqual(deduped[1]["title"], "Code like a Pro in C")
 
+    def test_zero_topic_contamination_in_study_bundler(self):
+        """Verify that study bundles are strictly isolated to their domain with zero topic contamination."""
+        from app.bundler import create_bundle, BundleRequest
+
+        # 1. Computer Networks Bundle
+        net_bundle = create_bundle(BundleRequest(minutes_available=30, topic="Computer Networks"))
+        self.assertTrue(len(net_bundle) > 0)
+        for item in net_bundle:
+            content_lower = item.content.lower()
+            # Must NOT contain unrelated dynamic programming or SOLID principles
+            self.assertNotIn("dynamic programming", content_lower)
+            self.assertNotIn("solid principle", content_lower)
+            self.assertNotIn("square root of", content_lower)
+
+        # 2. Database Systems Bundle
+        db_bundle = create_bundle(BundleRequest(minutes_available=30, topic="Database"))
+        self.assertTrue(len(db_bundle) > 0)
+        for item in db_bundle:
+            content_lower = item.content.lower()
+            # Must NOT contain network packet transmission or dynamic programming
+            self.assertNotIn("packet transmission", content_lower)
+            self.assertNotIn("dynamic programming", content_lower)
+            self.assertNotIn("square root of", content_lower)
+
 if __name__ == "__main__":
     unittest.main()

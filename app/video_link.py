@@ -75,8 +75,6 @@ def rank_and_cache_video_selection(topic: str, candidates: List[Dict[str, Any]])
     # --------------------------------------------------------------------------
     if not candidates:
         return None
-    if not candidates:
-        return None
 
     norm_topic = topic.lower()
     topic_tokens = set(re.findall(r'\b[a-z0-9]{3,}\b', norm_topic))
