@@ -25,14 +25,26 @@ class TestBackendArchitecture(unittest.TestCase):
     def test_fastapi_route_registration(self):
         """Ensure critical API endpoints are correctly mounted on the FastAPI app instance."""
         import main
-        routes = []
+        # 1. Collect from FastAPI's official OpenAPI specification paths
+        routes = set(main.app.openapi().get("paths", {}).keys())
+
+        # 2. Collect from FastAPI 0.137+ iter_route_contexts if available
+        try:
+            from fastapi.routing import iter_route_contexts
+            for ctx in iter_route_contexts(main.app.routes):
+                if hasattr(ctx, "path"):
+                    routes.add(ctx.path)
+        except (ImportError, AttributeError):
+            pass
+
+        # 3. Direct Starlette / APIRoute inspection with recursive router unpacking
         for r in main.app.routes:
             if hasattr(r, "path"):
-                routes.append(r.path)
+                routes.add(r.path)
             elif hasattr(r, "routes"):
                 for sub_r in getattr(r, "routes", []):
                     if hasattr(sub_r, "path"):
-                        routes.append(sub_r.path)
+                        routes.add(sub_r.path)
 
         critical_endpoints = [
             "/",
