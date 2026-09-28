@@ -156,6 +156,14 @@ jobs:
           # Add Hugging Face Space as a remote using the Write Token
           git remote add hf "https://kasshier:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}.git"
           
-          echo "Pushing full backend repository (all updated files) to Hugging Face Space..."
-          git push --force hf main:main
+          echo "Preparing clean backend deployment tree for Hugging Face Space..."
+          git checkout --orphan hf-deploy
+          
+          # Exclude non-backend components (Flutter app, test uploads, CI tests)
+          git rm -rf --cached --ignore-unmatch uploads recommender_api tests .github .kilo 2>/dev/null || true
+          
+          git commit -m "🚀 Automated sync from GitHub Actions CI [skip ci]" || echo "No changes to commit"
+          
+          echo "Pushing backend codebase to Hugging Face Space..."
+          git push --force hf hf-deploy:main
           echo "✅ Successfully synced and deployed backend to Hugging Face Spaces!"

@@ -1,3 +1,12 @@
+---
+title: Suluh AI Academic Suite
+emoji: 🏛️
+colorFrom: indigo
+colorTo: blue
+sdk: docker
+app_port: 7860
+---
+
 # 🏛️ suluh-ai: University AI Academic Suite & Pedagogical Recommender
 
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688.svg?style=flat&logo=fastapi)](https://fastapi.tiangolo.com/)
