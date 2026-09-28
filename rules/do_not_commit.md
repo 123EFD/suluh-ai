@@ -109,15 +109,19 @@ When implementing core algorithmic procedures, mathematical transformations, or 
 
 | # | Improvement | Origin Date | Complexity | Priority | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| 1 | Micro-Diagnostic 2-Min Adaptive Quiz (CAT) | 2026-07-31 | High | 🔥 High | Pending |
-| 2 | Bayesian / Deep Knowledge Tracing (BKT/DKT) | 2026-07-31 | High | Medium | Pending |
-| 3 | Multimodal PYQ Photo Scanner & Timestamp Mapper | 2026-07-31 | High | Medium | Pending |
-| 4 | Native Interactive Mermaid Flowchart Render | 2026-08-08 | Medium | 🔥 High | Pending |
-| 5 | Lens Transformation Cache Layer | 2026-07-31 | Low | Low | Pending |
-| 6 | Flashcard Deep-Dive Explanations & Links | 2026-08-17 | Low – Medium | Medium | **ACTIVE** |
-| 7 | Real student_quiz_logs Table & In-App Voting | 2026-08-21 | Medium | 🔥 High | Pending |
-| 8 | Live YouTube API Search for Video Resources | 2026-08-25 | Medium | Medium | **ACTIVE** |
-| 9 | PDF.js Web Worker & Semantic Chunk Retrieval Fix | 2026-09-14 | Low – Medium | Medium | Pending |
+| 1 | Micro-Diagnostic 2-Min Adaptive Radar & Risk MLP | 2026-07-31 | High | 🔥 High | ✅ **COMPLETED** |
+| 2 | Live YouTube API Search & Cache-Aside Ranker ([BLANK 2]) | 2026-08-25 | Medium | Medium | ✅ **COMPLETED** |
+| 3 | Automated CI/CD Pipeline & Hugging Face Deployment | 2026-09-25 | Medium | 🔥 High | ✅ **COMPLETED** |
+| 4 | Study Bundler Zero-Topic Contamination & DAG Fallback | 2026-09-26 | High | 🔥 High | ✅ **COMPLETED** |
+| 5 | Flashcard Deep-Dive Explanations, LaTeX Math & Papers | 2026-08-17 | Low – Medium | Medium | 🚀 **NEXT (ACTIVE)** |
+| 6 | Real student_quiz_logs Table & Wilson Score Heatmap | 2026-08-21 | Medium | 🔥 High | 📋 **PENDING** |
+| 7 | On-Demand Textbook RAG Fallback in Bundler (Tier 2) | 2026-09-26 | Medium | Medium | 📋 **PENDING** |
+| 8 | resources.db Hygiene Script (Purge Mislabeled/Trivia Rows) | 2026-09-26 | Low | Medium | 📋 **PENDING** |
+| 9 | Native Interactive Mermaid Flowchart Render | 2026-08-08 | Medium | 🔥 High | 📋 **PENDING** |
+| 10 | PDF.js Web Worker & Semantic Chunk Retrieval Fix | 2026-09-14 | Low – Medium | Medium | 📋 **PENDING** |
+| 11 | Multimodal PYQ Photo Scanner & Timestamp Mapper | 2026-07-31 | High | Medium | 📋 **PENDING** |
+| 12 | Bayesian / Deep Knowledge Tracing (BKT/DKT) | 2026-07-31 | High | Medium | 📋 **PENDING** |
+| 13 | Lens Transformation Cache Layer | 2026-07-31 | Low | Low | 📋 **PENDING** |
 
 ---
 
