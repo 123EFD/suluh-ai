@@ -132,8 +132,17 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-          lfs: true
+          fetch-depth: 1
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install Hugging Face Hub SDK
+        run: |
+          python -m pip install --upgrade pip
+          pip install huggingface_hub
 
       - name: Validate Deployment Secrets
         env:
@@ -148,22 +157,48 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_SPACE: ${{ secrets.HF_SPACE_NAME || 'Kasshier/ai-study-suite' }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
-          echo "Configuring Hugging Face Space remote credentials..."
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions CI"
-          
-          # Add Hugging Face Space as a remote using the Write Token
-          git remote add hf "https://kasshier:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}.git"
-          
-          echo "Preparing clean backend deployment tree for Hugging Face Space..."
-          git checkout --orphan hf-deploy
-          
-          # Exclude non-backend components (Flutter app, test uploads, CI tests)
-          git rm -rf --cached --ignore-unmatch uploads recommender_api tests .github .kilo 2>/dev/null || true
-          
-          git commit -m "🚀 Automated sync from GitHub Actions CI [skip ci]" || echo "No changes to commit"
-          
-          echo "Pushing backend codebase to Hugging Face Space..."
-          git push --force hf hf-deploy:main
-          echo "✅ Successfully synced and deployed backend to Hugging Face Spaces!"
+          python - << 'EOF'
+          import os
+          import sys
+          from huggingface_hub import HfApi
+
+          hf_token = os.environ.get("HF_TOKEN")
+          hf_space = os.environ.get("HF_SPACE", "Kasshier/ai-study-suite")
+          commit_sha = os.environ.get("COMMIT_SHA", "latest")[:7]
+
+          print(f"Deploying backend codebase to Hugging Face Space: {hf_space}...")
+          api = HfApi(token=hf_token)
+
+          try:
+              api.upload_folder(
+                  folder_path=".",
+                  repo_id=hf_space,
+                  repo_type="space",
+                  commit_message=f"🚀 Automated deploy from GitHub Actions [{commit_sha}]",
+                  ignore_patterns=[
+                      "recommender_api/**",
+                      "uploads/**",
+                      "assets/flashcards/**",
+                      "assets/pyq/**",
+                      "data/**",
+                      "tests/**",
+                      ".git/**",
+                      ".github/**",
+                      ".kilo/**",
+                      ".agent/**",
+                      ".agents/**",
+                      ".gemini/**",
+                      ".vscode/**",
+                      "venv/**",
+                      "__pycache__/**",
+                      "*.pyc",
+                      "*.log",
+                  ],
+              )
+              print("✅ Successfully synced and deployed backend to Hugging Face Spaces!")
+          except Exception as exc:
+              print(f"❌ Hugging Face Space deployment failed: {exc}", file=sys.stderr)
+              sys.exit(1)
+          EOF
