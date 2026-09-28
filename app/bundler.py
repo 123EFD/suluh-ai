@@ -14,6 +14,10 @@ from app.curriculum import (
     TOPIC_TAXONOMY,
     resolve_topic_metadata,
 )
+from app.heatmap_ranker import (
+    calculate_wilson_score_lower_bound,
+    rank_resources_by_wilson_score,
+)
 
 load_dotenv()
 
@@ -247,12 +251,39 @@ def create_bundle(req: BundleRequest):
                 _add_item(rid, topic_name, dur, rtype, content)
                 break
 
-    # 2. Greedy fill phase: fill remaining minutes strictly with verified candidates from this topic
+    # 2. Wilson Score Priority Phase: Query real peer recovery logs to prioritize threshold concepts
+    quiz_metrics = {}
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT topic_name, 
+                           SUM(CASE WHEN is_successful THEN 1 ELSE 0 END) AS positives,
+                           COUNT(*) AS total
+                    FROM student_quiz_logs
+                    GROUP BY topic_name
+                """)
+                for row in cur.fetchall():
+                    quiz_metrics[row[0]] = {"positives": int(row[1] or 0), "total": int(row[2] or 0)}
+    except Exception:
+        # Fallback cleanly if database is unreachable in test/offline environments
+        pass
+
     remaining_candidates = [c for c in candidates if _can_add(c[0], c[4])]
-    remaining_candidates.sort(key=lambda x: x[2], reverse=True)
-    for rid, topic_name, dur, rtype, content in remaining_candidates:
-        if total + dur <= req.minutes_available and _can_add(rid, content):
-            _add_item(rid, topic_name, dur, rtype, content)
+    cand_dicts = [
+        {"resource_id": c[0], "topic": c[1], "duration_min": c[2], "type": c[3], "content": c[4]}
+        for c in remaining_candidates
+    ]
+    # Rank candidates by peer-validated Wilson Score confidence interval
+    ranked_dicts = rank_resources_by_wilson_score(cand_dicts, quiz_metrics)
+    for item in ranked_dicts:
+        rid = item["resource_id"]
+        tname = item["topic"]
+        dur = item["duration_min"]
+        rtype = item["type"]
+        cnt = item["content"]
+        if total + dur <= req.minutes_available and _can_add(rid, cnt):
+            _add_item(rid, tname, dur, rtype, cnt)
         if total >= req.minutes_available:
             break
 

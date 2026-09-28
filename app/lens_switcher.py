@@ -26,21 +26,33 @@ Given a piece of academic text, output ONE of the following lenses **exactly** a
 * **exam** – list the key technical keywords an examiner would look for, each on its own line, prefixed with “✔”.
 Do NOT add any explanations, headings, or extra text. Do NOT wrap the output in markdown code blocks or backticks. Return *only* the requested content."""
 
+try:
+    from app.lens_cache import lens_cache
+except ModuleNotFoundError:
+    lens_cache = importlib.import_module("lens_cache").lens_cache
+
 @router.post("/transform", response_model=LensResponse)
 def transform(req: LensRequest):
     if req.lens not in {"analogy", "visual", "exam"}:
         raise HTTPException(status_code=400, detail="Invalid lens type. Must be 'analogy', 'visual', or 'exam'.")
     
-    #few-shot prompt (make as static file later )
+    # Check LRU TTL Cache first
+    cached = lens_cache.get(req.lens, "academic", req.source_text)
+    if cached:
+        return LensResponse(transformed=cached)
+    
+    # few-shot prompt
     user_msg = f"""Topic : {req.lens}\n---\n{req.source_text}"""
     
     try:
         result = groq_chat(
-                system_prompt=SYSTEM_PROMPT,
-                user_message=user_msg,
-                model="openai/gpt-oss-20b"   # replace with whatever you use
-            )
+            system_prompt=SYSTEM_PROMPT,
+            user_message=user_msg,
+            model="openai/gpt-oss-20b"
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Transformation failed: {str(e)}")
     
-    return LensResponse(transformed=result.strip())
+    cleaned = result.strip()
+    lens_cache.put(req.lens, "academic", req.source_text, cleaned)
+    return LensResponse(transformed=cleaned)

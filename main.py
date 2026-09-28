@@ -1491,6 +1491,64 @@ def get_high_yield_heatmap():
     heatmap_items.sort(key=lambda x: x.wilson_score, reverse=True)
     return heatmap_items
 
+class QuizAttemptLog(BaseModel):
+    topic_name: str
+    is_successful: bool
+    baseline_grade: float = 0.0
+
+@app.post("/api/log-quiz-attempt")
+def log_quiz_attempt(log: QuizAttemptLog):
+    """Logs a student's practice quiz/flashcard attempt into student_quiz_logs in PostgreSQL."""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO student_quiz_logs (topic_name, is_successful, baseline_grade)
+                    VALUES (%s, %s, %s)
+                """, (log.topic_name, log.is_successful, log.baseline_grade))
+            conn.commit()
+        return {"status": "success", "message": "Quiz attempt logged successfully."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error logging quiz attempt: {str(e)}")
+
+class BktUpdateRequest(BaseModel):
+    prior_mastery: float
+    is_correct: bool
+    p_transit: float = 0.15
+    p_guess: float = 0.20
+    p_slip: float = 0.10
+
+class BktUpdateResponse(BaseModel):
+    updated_mastery: float
+    predicted_next_correct: float
+
+@app.post("/api/bkt/update", response_model=BktUpdateResponse)
+def bkt_update_endpoint(req: BktUpdateRequest):
+    from app.knowledge_tracing import update_bkt_mastery, predict_next_correct_probability
+    new_mastery = update_bkt_mastery(req.prior_mastery, req.is_correct, req.p_transit, req.p_guess, req.p_slip)
+    pred_next = predict_next_correct_probability(new_mastery, req.p_guess, req.p_slip)
+    return BktUpdateResponse(updated_mastery=new_mastery, predicted_next_correct=pred_next)
+
+class TimestampMapRequest(BaseModel):
+    question_text: str
+    srt_subtitles: str
+    window_size: int = 3
+
+@app.post("/api/map-pyq-timestamp")
+def map_pyq_timestamp_endpoint(req: TimestampMapRequest):
+    from app.timestamp_mapper import parse_srt_subtitles, map_exam_question_to_video_timestamp
+    parsed_subs = parse_srt_subtitles(req.srt_subtitles)
+    return map_exam_question_to_video_timestamp(req.question_text, parsed_subs, req.window_size)
+
+class MermaidValidateRequest(BaseModel):
+    raw_mermaid: str
+
+@app.post("/api/sanitize-mermaid")
+def sanitize_mermaid_endpoint(req: MermaidValidateRequest):
+    from app.mermaid_validator import sanitize_mermaid_syntax
+    return {"sanitized_mermaid": sanitize_mermaid_syntax(req.raw_mermaid)}
+
+
 # =====================================================================
 # PHASE 12: PDF AI WORKSPACE DIAGNOSTIC & CHAPTER FOCUS NAVIGATOR
 # =====================================================================

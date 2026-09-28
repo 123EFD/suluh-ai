@@ -16,11 +16,26 @@ class TestBackendArchitecture(unittest.TestCase):
         from app.bundler import router as bundler_router, create_bundle, BundleRequest, ResourceItem
         from app.video_link import search_youtube_live, rank_and_cache_video_selection
 
+        from app.heatmap_ranker import calculate_wilson_score_lower_bound, rank_resources_by_wilson_score
+        from app.lens_cache import lens_cache, LensLRUTTLCache
+        from app.knowledge_tracing import update_bkt_mastery, predict_next_correct_probability
+        from app.timestamp_mapper import parse_srt_subtitles, map_exam_question_to_video_timestamp
+        from app.mermaid_validator import detect_and_break_graph_cycles, sanitize_mermaid_syntax
+
         self.assertIsNotNone(main.app)
         self.assertIsNotNone(bundler_router)
         self.assertTrue(callable(create_bundle))
         self.assertTrue(callable(search_youtube_live))
         self.assertTrue(callable(rank_and_cache_video_selection))
+        self.assertTrue(callable(calculate_wilson_score_lower_bound))
+        self.assertTrue(callable(rank_resources_by_wilson_score))
+        self.assertIsInstance(lens_cache, LensLRUTTLCache)
+        self.assertTrue(callable(update_bkt_mastery))
+        self.assertTrue(callable(predict_next_correct_probability))
+        self.assertTrue(callable(parse_srt_subtitles))
+        self.assertTrue(callable(map_exam_question_to_video_timestamp))
+        self.assertTrue(callable(detect_and_break_graph_cycles))
+        self.assertTrue(callable(sanitize_mermaid_syntax))
 
     def test_fastapi_route_registration(self):
         """Ensure critical API endpoints are correctly mounted on the FastAPI app instance."""
@@ -56,6 +71,10 @@ class TestBackendArchitecture(unittest.TestCase):
             "/library",
             "/chat",
             "/bundler/create",
+            "/api/log-quiz-attempt",
+            "/api/bkt/update",
+            "/api/map-pyq-timestamp",
+            "/api/sanitize-mermaid",
         ]
 
         for endpoint in critical_endpoints:
