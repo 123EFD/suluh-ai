@@ -30,74 +30,68 @@ class LensLRUTTLCache:
     def _generate_key(self, lens: str, topic: str, content: str) -> str:
         """Constructs a unique deterministic composite key."""
         return f"{lens.strip().lower()}::{topic.strip().lower()}::{hash(content)}"
-
-    # ==============================================================================
-    # [BLANK 4a]: LRU Cache Retrieval with TTL Expiry Check
-    # Task: Given query parameters (lens, topic, content), retrieve the cached
-    # pedagogical lens transformation. If the key exists:
-    # 1. Check if the entry has expired beyond ttl_seconds. If expired, purge it.
-    # 2. If valid, promote the node to the head of the Doubly Linked List (most recently used).
-    # 3. Return the cached string value.
-    #
-    # Input:
-    #   lens: str - Transformation lens ("feynman", "analogy", "first_principles", "cram")
-    #   topic: str - Subject topic name
-    #   content: str - Source text content
-    #
-    # Output:
-    #   Optional[str] - Cached transformed text if present and valid; None otherwise.
-    # ==============================================================================
+    
     def get(self, lens: str, topic: str, content: str) -> Optional[str]:
-        """
-        Retrieves a valid non-expired item from the cache and updates its recency.
-        
-        TODO:
-        1. Generate composite key via _generate_key(lens, topic, content).
-        2. If key not in self.map, return None.
-        3. Retrieve node from self.map.
-        4. Check expiry: if (current_time - node.timestamp) > self.ttl:
-             - Remove node from linked list.
-             - Delete key from self.map.
-             - Return None.
-        5. Move node to head of linked list (promote to most recently used).
-        6. Return node.val.
-        """
-        # [LEARNER IMPLEMENTATION REQUIRED - DO NOT WRITE WORKING LOGIC HERE]
-        return None
 
-    # ==============================================================================
-    # [BLANK 4b]: LRU Cache Insert with Node Promotion & Capacity Eviction
-    # Task: Insert or update a lens transformation in the cache.
-    # 1. If key exists: update value and timestamp, promote node to head.
-    # 2. If key is new: create Node, insert at head, store in map.
-    # 3. If size exceeds capacity: evict the least recently used node from tail.prev
-    #    and remove it from map.
-    #
-    # Input:
-    #   lens: str - Transformation lens
-    #   topic: str - Topic name
-    #   content: str - Source content
-    #   transformed_text: str - AI-generated lens transformation to store
-    #
-    # Output:
-    #   None
-    # ==============================================================================
-    def put(self, lens: str, topic: str, content: str, transformed_text: str) -> None:
-        """
-        Inserts or updates an entry, evicting the oldest node if capacity is reached.
+        key = self._generate_key(lens, topic, content)
+        if key not in self.map:
+            return None
         
-        TODO:
-        1. Generate composite key.
-        2. If key in self.map:
-             - Update node.val and node.timestamp.
-             - Move node to head.
-        3. Else:
-             - If len(self.map) >= self.capacity:
-                 - Evict tail.prev (LRU node) from list and map.
-             - Create new Node, add to head, and store in self.map.
-        """
-        # [LEARNER IMPLEMENTATION REQUIRED - DO NOT WRITE WORKING LOGIC HERE]
-        pass
+        if time.time() - self.map[key].timestamp > self.ttl:
+            # Expired: remove from list and map
+            node = self.map[key]
+            previous = node.prev
+            following = node.next
+            if previous is None or following is None:
+                del self.map[key]
+                return None
+            previous.next = following
+            following.prev = previous
+            del self.map[key]
+            return None
+        
+        # Promote the node to the head of the list
+        node = self.map[key]
+        previous = node.prev
+        following = node.next
+        if previous is None or following is None:
+            return None
+        previous.next = following
+        following.prev = previous
+        node.next = self.head
+        node.prev = None
+        self.head.prev = node
+        self.head = node
+
+        return node.val
+
+    def put(self, lens: str, topic: str, content: str, transformed_text: str) -> None:
+        key = self._generate_key(lens, topic, content)
+        if key in self.map:
+            node = self.map[key]
+            node.val = transformed_text
+            node.timestamp = time.time()
+            prev = node.prev
+            next = node.next
+            if prev is None or next is None:
+                return None
+            node.next = self.head
+            node.prev = None
+            self.head.prev = node
+            self.head = node    
+        if len(self.map) >= self.capacity:
+            lru_node = self.tail.prev
+            if lru_node is not None and lru_node.prev is not None:
+                lru_node.prev.next = self.tail
+                self.tail.prev = lru_node.prev
+                del self.map[lru_node.key]
+        # Create a new node and add it to the cache
+        new_node = Node(key, transformed_text, time.time())
+        new_node.next = self.head
+        new_node.prev = None
+        self.head.prev = new_node
+        self.head = new_node
+        self.map[key] = new_node
 
 # Global singleton instance for the API server
 lens_cache = LensLRUTTLCache(capacity=256, ttl_seconds=7200.0)

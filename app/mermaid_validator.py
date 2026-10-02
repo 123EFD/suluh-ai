@@ -1,40 +1,39 @@
 import re
 from typing import List, Dict, Tuple, Set
 
-# ==============================================================================
-# [BLANK 7]: Directed Acyclic Graph (DAG) Cycle Detection for Mindmaps
-# Task: Given a set of directed concept dependency edges (u, v) representing a
-# syllabus curriculum or mindmap, detect circular cycles using Depth-First Search
-# (DFS) with 3-color node tracking (White/Gray/Black). If an edge points to an
-# active ancestor (Gray node), it forms a circular deadlock and must be dropped.
-#
-# Three-Color Algorithm:
-#   WHITE (0) : Unvisited node
-#   GRAY (1)  : Currently exploring in active recursion stack (ancestor)
-#   BLACK (2) : Fully processed node and all descendants
-#
-# Input:
-#   edges: List[Tuple[str, str]] - Directed concept edges [(from_node, to_node), ...]
-#
-# Output:
-#   List[Tuple[str, str]] - Acyclic subset of edges guaranteed to have zero cycles
-# ==============================================================================
 def detect_and_break_graph_cycles(edges: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
-    """
-    Filters directed graph edges to guarantee an acyclic structure (DAG) suitable for rendering.
-    
-    TODO:
-    1. Build adjacency list: graph[u] = [v1, v2, ...].
-    2. Maintain color dict: 0 = unvisited, 1 = visiting, 2 = visited.
-    3. Iterate through edges:
-       - Run DFS helper from root nodes.
-       - If exploring neighbor v and color[v] == 1 (GRAY): cycle detected! Omit edge.
-       - Otherwise retain edge in acyclic list.
-    4. Return the filtered list of acyclic edges.
-    """
-    # [LEARNER IMPLEMENTATION REQUIRED - DO NOT WRITE WORKING LOGIC HERE]
-    return edges
+    if not edges: return []
+    graph: Dict[str, List[str]] = {}
+    #Maintain color dict: 0 = unvisited, 1 = visiting, 2 = visited.
+    color: Dict[str, int] = {}
 
+    for u, v in edges:
+        if u not in graph:
+            graph[u] = []
+        if v not in graph:
+            graph[v] = []
+        graph[u].append(v)
+        color[u] = 0
+        color[v] = 0
+    
+    back_edges: Set[Tuple[str, str]] = set()
+    
+    #DFS helper 
+    def dfs(node : str) -> None:
+        color[node] = 1 
+        for neighbor in graph.get(node, []):
+            if color[neighbor] == 1:
+                back_edges.add((node, neighbor))  # Cycle detected
+            elif color[neighbor] == 0:
+                dfs(neighbor) #unvisited then traverse deeper explored 
+        color[node] = 2  
+        #outer loop: handle all disconnected components of the graph
+    for node in list(graph.keys()): 
+        if color[node] == 0:
+            dfs(node)
+    
+    #filter out detected back-edges while preserving original order of edges
+    return [edge for edge in edges if edge not in back_edges]
 
 def sanitize_mermaid_syntax(mermaid_code: str) -> str:
     """
