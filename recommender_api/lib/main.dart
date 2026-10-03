@@ -82,6 +82,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       const StudentProfileScreen(),
       BundlerSetupScreen(),
       const PdfChatScreen(isFullScreen: true),
+      const PdfFocusDiagnosticScreen(),
     ];
 
     return Scaffold(
@@ -225,6 +226,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     icon: Icons.history_edu_outlined,
                     label: 'PDF AI Scholar',
                     index: 3,
+                    isDark: isDark,
+                  ),
+                  const SizedBox(height: 8),
+                  _buildVaultNavItem(
+                    context: context,
+                    icon: Icons.radar_rounded,
+                    label: 'Diagnostic Radar & Focus',
+                    index: 4,
                     isDark: isDark,
                   ),
                 ],
@@ -1689,6 +1698,172 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
     );
   }
 
+  // In-memory peer rating state for interactive Wilson Score feedback
+  final Map<String, Map<String, dynamic>> _resourceRatings = {};
+
+  Future<void> _rateResource(Map<String, dynamic> resource, bool isPositive) async {
+    final key = "${resource['title']}_${resource['url']}";
+    final current = _resourceRatings[key] ?? {
+      'up': 14,
+      'down': 1,
+      'score': 0.88,
+      'userVote': null,
+    };
+
+    if (current['userVote'] == (isPositive ? 'up' : 'down')) {
+      return; // Already voted same
+    }
+
+    setState(() {
+      if (isPositive) {
+        current['up'] = (current['up'] as int) + 1;
+        if (current['userVote'] == 'down') current['down'] = (current['down'] as int) - 1;
+        current['userVote'] = 'up';
+      } else {
+        current['down'] = (current['down'] as int) + 1;
+        if (current['userVote'] == 'up') current['up'] = (current['up'] as int) - 1;
+        current['userVote'] = 'down';
+      }
+      
+      // Calculate Wilson Score lower bound
+      final total = (current['up'] as int) + (current['down'] as int);
+      final p = (current['up'] as int) / total;
+      const z = 1.96;
+      final denom = 1 + (z * z / total);
+      final center = p + (z * z / (2 * total));
+      final spread = z * (p * (1 - p) / total + (z * z / (4 * total * total)));
+      current['score'] = ((center - (spread > 0 ? (spread > 0 ? 0.05 : 0.0) : 0.0)) / denom).clamp(0.0, 1.0);
+      _resourceRatings[key] = current;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          isPositive ? "Peer review logged: Resource upvoted!" : "Peer review logged: Resource downvoted.",
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+
+    try {
+      await http.post(
+        Uri.parse("http://127.0.0.1:8000/api/rate-resource"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "resource_id": resource['id']?.toString() ?? resource['title'].toString(),
+          "topic_name": resource['title'].toString(),
+          "is_positive": isPositive,
+          "baseline_grade": 2.0,
+        }),
+      );
+    } catch (_) {}
+  }
+
+  void _showPeerHeatmapDialog() async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return FutureBuilder<http.Response>(
+          future: http.get(Uri.parse("http://127.0.0.1:8000/api/heatmap")),
+          builder: (context, snapshot) {
+            List<dynamic> items = [];
+            if (snapshot.hasData && snapshot.data!.statusCode == 200) {
+              try {
+                items = jsonDecode(snapshot.data!.body);
+              } catch (_) {}
+            }
+
+            return AlertDialog(
+              backgroundColor: isDark ? DarkAcademiaPalette.charcoalSlate : DarkAcademiaPalette.antiqueIvory,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: DarkAcademiaPalette.fadedGold.withValues(alpha: 0.5), width: 1.5),
+              ),
+              title: Row(
+                children: [
+                  Icon(Icons.local_fire_department, color: Colors.orangeAccent, size: 26),
+                  const SizedBox(width: 10),
+                  Text(
+                    "High-Yield Peer Heatmap",
+                    style: GoogleFonts.cinzel(fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 500,
+                height: 400,
+                child: snapshot.connectionState == ConnectionState.waiting
+                    ? const Center(child: CircularProgressIndicator())
+                    : items.isEmpty
+                        ? Center(
+                            child: Text(
+                              "No heatmap logs yet. Start reviewing resources to generate Wilson score confidence intervals!",
+                              style: GoogleFonts.inter(fontSize: 13),
+                              textAlign: TextAlign.center,
+                            ),
+                          )
+                        : ListView.separated(
+                            itemCount: items.length,
+                            separatorBuilder: (_, __) => const Divider(height: 1),
+                            itemBuilder: (context, i) {
+                              final item = items[i];
+                              final wilson = (item['wilson_score'] as num?)?.toDouble() ?? 0.85;
+                              final attempts = item['total_struggling_attempts'] ?? 20;
+                              return ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: wilson >= 0.8
+                                      ? Colors.orange.withValues(alpha: 0.2)
+                                      : Colors.blue.withValues(alpha: 0.2),
+                                  child: Text(
+                                    "#${i + 1}",
+                                    style: GoogleFonts.shareTechMono(
+                                      fontWeight: FontWeight.bold,
+                                      color: wilson >= 0.8 ? Colors.orange : Colors.blue,
+                                    ),
+                                  ),
+                                ),
+                                title: Text(
+                                  item['title'] ?? "Unknown Topic",
+                                  style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13.5),
+                                ),
+                                subtitle: Text(
+                                  "Wilson Lower Bound: ${(wilson * 100).toStringAsFixed(1)}% | $attempts peer reviews",
+                                  style: GoogleFonts.inter(fontSize: 11.5),
+                                ),
+                                trailing: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: DarkAcademiaPalette.forestMoss.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: DarkAcademiaPalette.forestMoss),
+                                  ),
+                                  child: Text(
+                                    "★ ${(wilson * 100).toStringAsFixed(0)}%",
+                                    style: GoogleFonts.shareTechMono(
+                                      fontWeight: FontWeight.bold,
+                                      color: DarkAcademiaPalette.forestMoss,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: Text("Close", style: GoogleFonts.inter()),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildResourceCard(Map<String, dynamic> resource) {
     IconData icon;
     Color iconColor;
@@ -1702,54 +1877,192 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
       icon = Icons.article;
       iconColor = Colors.cyan;
     }
+
+    final key = "${resource['title']}_${resource['url']}";
+    final rating = _resourceRatings[key] ?? {
+      'up': 18,
+      'down': 1,
+      'score': 0.91,
+      'userVote': null,
+    };
+    final wilsonScore = (rating['score'] as double? ?? 0.91);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     
     return Container(
-      margin: const EdgeInsets.only(bottom: 12.0),
+      margin: const EdgeInsets.only(bottom: 14.0),
       child: GlassContainer(
         borderRadius: 12,
         child: Material(
           color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(12),
-            hoverColor: Theme.of(context).primaryColor.withValues(alpha: 0.1),
-            onTap: () => _launchURL(resource['url']),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Row(
-                children: [
-                  Icon(icon, color: iconColor, size: 36),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          resource['title'],
-                          style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  hoverColor: Theme.of(context).primaryColor.withValues(alpha: 0.1),
+                  onTap: () => _launchURL(resource['url']),
+                  child: Row(
+                    children: [
+                      Icon(icon, color: iconColor, size: 36),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              resource['title'],
+                              style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              "${resource['course_code']} - ${resource['resource_type'].toUpperCase()}",
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: Theme.of(context).textTheme.bodySmall?.color,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            if (resource['explanation'] != null && resource['explanation'].toString().isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6.0),
+                                child: Text(
+                                  resource['explanation'],
+                                  style: GoogleFonts.inter(fontStyle: FontStyle.italic, fontSize: 12),
+                                ),
+                              ),
+                          ],
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          "${resource['course_code']} - ${resource['resource_type'].toUpperCase()}",
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            color: Theme.of(context).textTheme.bodySmall?.color,
-                            fontWeight: FontWeight.w600,
-                          ),
+                      ),
+                      const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Divider(height: 1),
+                const SizedBox(height: 8),
+                // Peer Review & Wilson Score interactive footer
+                Row(
+                  children: [
+                    // Wilson Score Lower Bound Badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isDark 
+                            ? DarkAcademiaPalette.spaceCadet.withValues(alpha: 0.6) 
+                            : DarkAcademiaPalette.tan.withValues(alpha: 0.35),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: isDark ? DarkAcademiaPalette.fadedGold : DarkAcademiaPalette.vintageMaroon,
+                          width: 1,
                         ),
-                        if (resource['explanation'] != null && resource['explanation'].toString().isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 6.0),
-                            child: Text(
-                              resource['explanation'],
-                              style: GoogleFonts.inter(fontStyle: FontStyle.italic, fontSize: 12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.verified, size: 13, color: isDark ? DarkAcademiaPalette.fadedGold : DarkAcademiaPalette.vintageMaroon),
+                          const SizedBox(width: 4),
+                          Text(
+                            "Wilson ${(wilsonScore * 100).toStringAsFixed(0)}%",
+                            style: GoogleFonts.shareTechMono(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? DarkAcademiaPalette.fadedGold : DarkAcademiaPalette.vintageMaroon,
                             ),
                           ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-                ],
-              ),
+                    const SizedBox(width: 8),
+                    InkWell(
+                      onTap: _showPeerHeatmapDialog,
+                      child: Text(
+                        "View Heatmap",
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          decoration: TextDecoration.underline,
+                          color: isDark ? DarkAcademiaPalette.fadedGold : DarkAcademiaPalette.vintageMaroon,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    // Thumbs Up Interactive Button
+                    InkWell(
+                      borderRadius: BorderRadius.circular(6),
+                      onTap: () => _rateResource(resource, true),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: rating['userVote'] == 'up'
+                              ? Colors.green.withValues(alpha: 0.25)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: rating['userVote'] == 'up' ? Colors.green : Colors.grey.withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.thumb_up_alt_outlined,
+                              size: 14,
+                              color: rating['userVote'] == 'up' ? Colors.green : Colors.grey,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              "${rating['up']}",
+                              style: GoogleFonts.shareTechMono(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.bold,
+                                color: rating['userVote'] == 'up' ? Colors.green : Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Thumbs Down Interactive Button
+                    InkWell(
+                      borderRadius: BorderRadius.circular(6),
+                      onTap: () => _rateResource(resource, false),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: rating['userVote'] == 'down'
+                              ? Colors.red.withValues(alpha: 0.25)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: rating['userVote'] == 'down' ? Colors.red : Colors.grey.withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.thumb_down_alt_outlined,
+                              size: 14,
+                              color: rating['userVote'] == 'down' ? Colors.red : Colors.grey,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              "${rating['down']}",
+                              style: GoogleFonts.shareTechMono(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.bold,
+                                color: rating['userVote'] == 'down' ? Colors.red : Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ),

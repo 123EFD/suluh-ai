@@ -12,7 +12,59 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'theme/glassmorphism.dart';
 import 'theme/app_theme.dart';
-import 'mind_map_screen.dart';
+import 'package:flutter_math_fork/flutter_math.dart';
+
+class CustomLatexElementBuilder extends MarkdownElementBuilder {
+  final TextStyle? textStyle;
+  final double? textScaleFactor;
+
+  CustomLatexElementBuilder({this.textStyle, this.textScaleFactor});
+
+  @override
+  Widget visitElementAfterWithContext(
+    BuildContext context,
+    md.Element element,
+    TextStyle? preferredStyle,
+    TextStyle? parentStyle,
+  ) {
+    String text = element.textContent.trim();
+    if (text.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // Strip unescaped or nested dollar signs from inside the math string to avoid:
+    // "Parser Error: Can't use function '$' in math mode"
+    if (text.startsWith(r'$') && text.endsWith(r'$') && text.length > 2) {
+      text = text.substring(1, text.length - 1).trim();
+    }
+    text = text.replaceAll(r'$', '');
+
+    MathStyle mathStyle = MathStyle.text;
+    if (element.attributes['MathStyle'] == 'display') {
+      mathStyle = MathStyle.display;
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      clipBehavior: Clip.antiAlias,
+      child: Math.tex(
+        text,
+        textStyle: textStyle,
+        mathStyle: mathStyle,
+        textScaleFactor: textScaleFactor,
+        onErrorFallback: (err) {
+          return Text(
+            element.textContent,
+            style: (textStyle ?? const TextStyle()).copyWith(
+              fontStyle: FontStyle.italic,
+              fontFamily: 'serif',
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
 
 class AcademicBlockquoteBuilder extends MarkdownElementBuilder {
   final bool isDark;
@@ -103,7 +155,6 @@ class _PdfChatScreenState extends State<PdfChatScreen> with TickerProviderStateM
   late AnimationController _sidebarController;
   late Animation<double> _sidebarAnimation;
   bool _isSidebarOpen = false;
-  bool _isGeneratingMap = false;
 
   @override
   void initState() {
@@ -304,7 +355,37 @@ class _PdfChatScreenState extends State<PdfChatScreen> with TickerProviderStateM
 
   String _sanitizeMarkdown(String raw) {
     if (raw.isEmpty) return raw;
-    final lines = raw.split('\n');
+
+    // 1. Prevent collision with flutter_markdown_latex's '( ' and ' )' delimiters
+    // Whenever math is inside parentheses like "( $math$ )", remove whitespace around $
+    String sanitized = raw.replaceAllMapped(
+      RegExp(r'\(\s+\$'),
+      (m) => '(\$',
+    ).replaceAllMapped(
+      RegExp(r'\$\s+\)'),
+      (m) => '\$)',
+    );
+
+    // Also handle brackets "[ $" and "$ ]"
+    sanitized = sanitized.replaceAllMapped(
+      RegExp(r'\[\s+\$'),
+      (m) => '[\$',
+    ).replaceAllMapped(
+      RegExp(r'\$\s+\]'),
+      (m) => '\$]',
+    );
+
+    // 2. Clean nested $ inside display math $$...$$
+    sanitized = sanitized.replaceAllMapped(
+      RegExp(r'\$\$(.*?)\$\$', dotAll: true),
+      (match) {
+        String inner = match.group(1) ?? '';
+        String cleanedInner = inner.replaceAll(r'$', '');
+        return '\$\$$cleanedInner\$\$';
+      },
+    );
+
+    final lines = sanitized.split('\n');
     final sanitizedLines = <String>[];
     bool inTable = false;
 
@@ -487,303 +568,6 @@ class _PdfChatScreenState extends State<PdfChatScreen> with TickerProviderStateM
     );
   }
 
-  Future<void> _generateMindMap({
-    required String source, 
-    required String mapType,
-    int? pageStart,
-    int? pageEnd,
-  }) async {
-    //show loading indicator 
-    setState(() {
-      _isGeneratingMap = true;
-    });
-
-    try {
-      //biuld request and send the http.post()
-      final response = await http.post(
-        Uri.parse('$_baseUrl/generate-mindmap'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          "filename": _pdfName,
-          "source_type": source,
-          "map_type": mapType,
-          "page_start": pageStart,
-          "page_end": pageEnd
-        }),
-      );
-
-      //parse response JSON include nodes, edges, mermaid_code
-      if (response.statusCode == 200) {
-        //parse the JSON string into Dart objects
-        final Map<String, dynamic> jsonResponse = jsonDecode(response.body);
-
-        //navigate to MindMapScree, pass the typed data
-        if (mounted) {
-          Navigator.push(
-            context, 
-            MaterialPageRoute(
-              builder: (_) => MindMapScreen(data: jsonResponse),
-            ),
-          );
-        }
-      } else {
-        throw Exception("Failed to generate mind map: ${response.body}");
-      }
-    } catch (e) {
-      //show Snackbar or dialog to inform user of failure
-      debugPrint("Failed to generate mind map: $e");
-    } finally {
-      setState(() {
-        _isGeneratingMap = false;
-      });
-    }
-  }
-
-  void _showMindMapDialog() {
-    int selectedSourceIndex = 0; //0=Chat history, 1 = PDF range
-    String selectedMapType = 'hierarchical';
-    final pageStartController = TextEditingController();
-    final pageEndController = TextEditingController();
-
-    final mapTypes = [
-    {'id': 'hierarchical', 'label': 'Hierarchical', 'icon': Icons.account_tree},
-    {'id': 'flowchart',    'label': 'Flowchart',    'icon': Icons.linear_scale},
-    {'id': 'bubble',       'label': 'Bubble Map',   'icon': Icons.bubble_chart},
-    {'id': 'tree',         'label': 'Tree Map',     'icon': Icons.park_outlined},
-    {'id': 'concept',      'label': 'Concept Map',  'icon': Icons.hub_outlined},
-  ];
-
-  showDialog(
-    context: context,
-    builder: (dialogContext) {
-      //use StatefulBuilder to manage the dialog state and update own UI instead of entire screen
-      return StatefulBuilder(
-        builder: (context, setDialogState) {
-          final isDark = Theme.of(context).brightness == Brightness.dark;
-
-          return AlertDialog(
-            backgroundColor: isDark ? DarkAcademiaPalette.charcoalSlate : DarkAcademiaPalette.antiqueIvory,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: BorderSide(
-                color: isDark ? DarkAcademiaPalette.fadedGold.withValues(alpha: 0.35) : DarkAcademiaPalette.tan,
-                width: 1.5,
-              ),
-            ),
-            title: Text('Generate Mind Map', style: GoogleFonts.cinzel(fontWeight: FontWeight.bold)),
-            content: SizedBox(
-              width: 450,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-
-                  //Source Selection Tabs
-                  Text('Source', style: GoogleFonts.cinzel(fontWeight: FontWeight.bold, fontSize: 13)),
-                  const SizedBox(height: 8),
-
-                  Row(
-                    children: [
-                      _buildSourceTab(label: 'Chat History', index: 0, selectedIndex: selectedSourceIndex, onTap: () {
-                        setDialogState(() {
-                          selectedSourceIndex = 0;
-                        });
-                      }),
-                      _buildSourceTab(label: 'PDF Range', index: 1, selectedIndex: selectedSourceIndex, onTap: () {
-                        setDialogState(() {
-                          selectedSourceIndex = 1;
-                        });
-                      })
-                    ]
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  //PDF Range Inputs tabs
-                  if (selectedSourceIndex == 1) ...[
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: pageStartController,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Start Page',
-                              border: OutlineInputBorder(),
-                            ),
-                          )
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextField(
-                            controller: pageEndController,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'End Page',
-                              border: OutlineInputBorder(),
-                            ),
-                          )
-                        )
-                      ],
-                      ),
-                      const SizedBox(height: 16),
-                  ],
-
-                  //Map Type Selector
-                  const Text('Map Type', style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: mapTypes.map((type) {
-                      final isSelected = type['id'] == selectedMapType;
-                      final isDark = Theme.of(context).brightness == Brightness.dark;
-                      return GestureDetector(
-                        onTap: () {
-                          //update selectedMapType using setDialogState
-                          setDialogState(() {
-                            selectedMapType = type['id'] as String;
-                          });
-                        },
-                        child: Container(
-                          width: 130,
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? (isDark ? DarkAcademiaPalette.spaceCadet : DarkAcademiaPalette.caputMortuum)
-                                : (isDark ? const Color(0xFF23252A) : const Color(0xFFFAF7F0)),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: isSelected
-                                  ? DarkAcademiaPalette.fadedGold
-                                  : (isDark ? DarkAcademiaPalette.slateGray.withValues(alpha: 0.3) : DarkAcademiaPalette.tan),
-                              width: isSelected ? 1.5 : 1,
-                            ),
-                            boxShadow: isSelected
-                                ? [
-                                    BoxShadow(
-                                      color: DarkAcademiaPalette.fadedGold.withValues(alpha: 0.2),
-                                      blurRadius: 6,
-                                      offset: const Offset(0, 2),
-                                    )
-                                  ]
-                                : null,
-                          ),
-                          child: Column(
-                            children: [
-                              Icon(
-                                type['icon'] as IconData,
-                                color: isSelected
-                                    ? DarkAcademiaPalette.fadedGold
-                                    : (isDark ? DarkAcademiaPalette.tan : DarkAcademiaPalette.caputMortuum),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                type['label'] as String,
-                                textAlign: TextAlign.center,
-                                style: GoogleFonts.cinzel(
-                                  fontSize: 11,
-                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                                  color: isSelected
-                                      ? Colors.white
-                                      : (isDark ? Colors.white70 : DarkAcademiaPalette.oxfordBrown),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ],
-              ),
-              ),
-
-              //Actions Buttons
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: Text(
-                    "Cancel",
-                    style: GoogleFonts.inter(
-                      color: Theme.of(context).brightness == Brightness.dark ? DarkAcademiaPalette.tan : DarkAcademiaPalette.slateGray,
-                    ),
-                  ),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).brightness == Brightness.dark ? DarkAcademiaPalette.caputMortuum : DarkAcademiaPalette.spaceCadet,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      side: const BorderSide(color: DarkAcademiaPalette.fadedGold, width: 1),
-                    ),
-                  ),
-                  onPressed: () {
-                    Navigator.pop(dialogContext);
-                    //call the mind map generation function with selected options
-                    _generateMindMap(
-                      source : selectedSourceIndex == 0 ? 'chat_history' : 'pdf_range',
-                      mapType: selectedMapType,
-                      pageStart : int.tryParse(pageStartController.text),
-                      pageEnd : int.tryParse(pageEndController.text)
-                    );
-                  },
-                  child: Text(
-                    'Synthesize Mind Map',
-                    style: GoogleFonts.cinzel(fontWeight: FontWeight.bold, letterSpacing: 0.8),
-                  ),
-                ),
-              ],
-          );
-        },
-      );
-    },
-    );
-  }
-
-  Widget _buildSourceTab({
-    required String label,
-    required int index,
-    required int selectedIndex,
-    required VoidCallback onTap,
-  }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isSelected = index == selectedIndex;
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? (isDark ? DarkAcademiaPalette.spaceCadet : DarkAcademiaPalette.caputMortuum)
-                : (isDark ? const Color(0xFF23252A) : const Color(0xFFFAF7F0)),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: isSelected
-                  ? DarkAcademiaPalette.fadedGold
-                  : (isDark ? DarkAcademiaPalette.slateGray.withValues(alpha: 0.3) : DarkAcademiaPalette.tan),
-              width: isSelected ? 1.5 : 1,
-            ),
-          ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: GoogleFonts.cinzel(
-              color: isSelected
-                  ? (isDark ? DarkAcademiaPalette.fadedGold : Colors.white)
-                  : (isDark ? Colors.white70 : DarkAcademiaPalette.oxfordBrown),
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              fontSize: 12,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -828,28 +612,6 @@ class _PdfChatScreenState extends State<PdfChatScreen> with TickerProviderStateM
                 tooltip: 'New Chat',
                 onPressed: _clearChatHistory,
               ),
-            if (_pdfName.isNotEmpty)
-              _isGeneratingMap
-                  ? const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16.0),
-                      child: Center(
-                        child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: DarkAcademiaPalette.fadedGold,
-                          ),
-                        ),
-                      ),
-                    )
-                  : IconButton(
-                      icon: const Icon(Icons.account_tree_outlined),
-                      tooltip: 'Export as Mind Map',
-                      onPressed: () {
-                        _showMindMapDialog();
-                      }
-                    ),
             IconButton(
               icon: const Icon(Icons.upload_file),
               onPressed: _isProcessingPdf ? null : _pickAndUploadPdf,
@@ -1237,7 +999,7 @@ class _PdfChatScreenState extends State<PdfChatScreen> with TickerProviderStateM
                                 selectable: true,
                                 data: _sanitizeMarkdown(msg['text']!),
                                 builders: {
-                                  'latex': LatexElementBuilder(
+                                  'latex': CustomLatexElementBuilder(
                                     textStyle: TextStyle(
                                       fontFamily: 'serif',
                                       fontSize: 15,

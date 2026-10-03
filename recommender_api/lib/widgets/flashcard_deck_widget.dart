@@ -3,10 +3,61 @@ import 'package:animated_flash_cards/animated_flash_cards.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_markdown_latex/flutter_markdown_latex.dart';
+import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:url_launcher/url_launcher.dart';
 import '../models/resource_item.dart';
 import '../theme/app_theme.dart';
+
+class CustomLatexElementBuilder extends MarkdownElementBuilder {
+  final TextStyle? textStyle;
+  final double? textScaleFactor;
+
+  CustomLatexElementBuilder({this.textStyle, this.textScaleFactor});
+
+  @override
+  Widget visitElementAfterWithContext(
+    BuildContext context,
+    md.Element element,
+    TextStyle? preferredStyle,
+    TextStyle? parentStyle,
+  ) {
+    String text = element.textContent.trim();
+    if (text.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    if (text.startsWith(r'$') && text.endsWith(r'$') && text.length > 2) {
+      text = text.substring(1, text.length - 1).trim();
+    }
+    text = text.replaceAll(r'$', '');
+
+    MathStyle mathStyle = MathStyle.text;
+    if (element.attributes['MathStyle'] == 'display') {
+      mathStyle = MathStyle.display;
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      clipBehavior: Clip.antiAlias,
+      child: Math.tex(
+        text,
+        textStyle: textStyle,
+        mathStyle: mathStyle,
+        textScaleFactor: textScaleFactor,
+        onErrorFallback: (err) {
+          return Text(
+            element.textContent,
+            style: (textStyle ?? const TextStyle()).copyWith(
+              fontStyle: FontStyle.italic,
+              fontFamily: 'serif',
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
 
 class FlashcardDeckWidget extends StatelessWidget {
   final List<ResourceItem> items;
@@ -244,6 +295,18 @@ class FlashcardDeckWidget extends StatelessWidget {
     if (raw.isEmpty) return raw;
     String text = raw;
 
+    // Prevent collision with flutter_markdown_latex's '( ' and ' )' delimiters
+    text = text.replaceAllMapped(RegExp(r'\(\s+\$'), (m) => '(\$');
+    text = text.replaceAllMapped(RegExp(r'\$\s+\)'), (m) => '\$)');
+    text = text.replaceAllMapped(RegExp(r'\[\s+\$'), (m) => '[\$');
+    text = text.replaceAllMapped(RegExp(r'\$\s+\]'), (m) => '\$]');
+
+    // Strip nested $ inside display math $$...$$
+    text = text.replaceAllMapped(RegExp(r'\$\$(.*?)\$\$', dotAll: true), (match) {
+      String inner = match.group(1) ?? '';
+      return '\$\$${inner.replaceAll(r'$', '')}\$\$';
+    });
+
     // Convert literal escaped newlines and quotes if encoded
     if (text.contains(r'\n')) {
       text = text.replaceAll(r'\n', '\n');
@@ -365,7 +428,7 @@ class FlashcardDeckWidget extends StatelessWidget {
               child: MarkdownBody(
                 data: cleanedContent,
                 builders: {
-                  'latex': LatexElementBuilder(
+                  'latex': CustomLatexElementBuilder(
                     textStyle: TextStyle(
                       fontFamily: 'serif',
                       fontSize: 15.0,

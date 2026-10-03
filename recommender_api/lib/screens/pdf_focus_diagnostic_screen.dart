@@ -146,6 +146,8 @@ class _PdfFocusDiagnosticScreenState extends State<PdfFocusDiagnosticScreen> {
   bool _isUploadingPdf = false;
   bool _isResolvingPdf = false;
   String? _generatingFlashcardSubId;
+  final Map<String, double> _bktMasteryMap = {};
+  final Map<String, double> _bktPredNextMap = {};
   bool _isAnalyzing = false;
   String? _errorMessage;
 
@@ -358,6 +360,212 @@ class _PdfFocusDiagnosticScreenState extends State<PdfFocusDiagnosticScreen> {
               "Please explain the core concepts of '${sub.title}' (pages ${sub.pageStart}-${sub.pageEnd}) in detail. Highlight formulas, principles, and common university exam questions.",
         ),
       ),
+    );
+  }
+
+  void _openBktMasterySheet(SubchapterFocusModel sub) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    double currentMastery = _bktMasteryMap[sub.subchapterId] ?? 0.35;
+    double currentPred = _bktPredNextMap[sub.subchapterId] ?? 0.42;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final isMastered = currentMastery >= 0.85;
+            final badgeLabel = isMastered
+                ? "MASTERED (>= 85%)"
+                : (currentMastery >= 0.60 ? "DEVELOPING / PROFICIENT" : "NOVICE / LEARNING");
+            final badgeColor = isMastered
+                ? DarkAcademiaPalette.forestMoss
+                : (currentMastery >= 0.60 ? Colors.blue : DarkAcademiaPalette.caputMortuum);
+
+            return Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: isDark ? DarkAcademiaPalette.charcoalSlate : DarkAcademiaPalette.antiqueIvory,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                border: Border.all(
+                  color: isDark ? DarkAcademiaPalette.fadedGold.withValues(alpha: 0.4) : DarkAcademiaPalette.tan,
+                  width: 1.5,
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          sub.title,
+                          style: GoogleFonts.cinzel(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: badgeColor.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: badgeColor),
+                        ),
+                        child: Text(
+                          badgeLabel,
+                          style: GoogleFonts.shareTechMono(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: badgeColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    "Bayesian Knowledge Tracing (BKT) dynamically tracks your latent concept mastery P(L) using transition, guess, and slip probabilities.",
+                    style: GoogleFonts.inter(fontSize: 12.5, color: Colors.grey[700]),
+                  ),
+                  const SizedBox(height: 16),
+                  // Animated Mastery Bar
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        "Concept Mastery: ${(currentMastery * 100).toStringAsFixed(1)}%",
+                        style: GoogleFonts.shareTechMono(fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        "P(Correct Next): ${(currentPred * 100).toStringAsFixed(1)}%",
+                        style: GoogleFonts.shareTechMono(fontSize: 12, color: Colors.blueAccent),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: LinearProgressIndicator(
+                      value: currentMastery.clamp(0.0, 1.0),
+                      minHeight: 12,
+                      backgroundColor: Colors.grey.withValues(alpha: 0.2),
+                      valueColor: AlwaysStoppedAnimation<Color>(badgeColor),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Divider(height: 1),
+                  const SizedBox(height: 16),
+                  Text(
+                    "Interactive Self-Assessment:",
+                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    "Did you understand and correctly recall the key formulas and principles for this chapter?",
+                    style: GoogleFonts.inter(fontSize: 12.5),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            try {
+                              final resp = await http.post(
+                                Uri.parse("$_baseUrl/api/bkt/update"),
+                                headers: {"Content-Type": "application/json"},
+                                body: jsonEncode({
+                                  "prior_mastery": currentMastery,
+                                  "is_correct": true,
+                                  "p_transit": 0.15,
+                                  "p_guess": 0.20,
+                                  "p_slip": 0.10,
+                                }),
+                              );
+                              if (resp.statusCode == 200) {
+                                final data = jsonDecode(resp.body);
+                                final newM = (data['updated_mastery'] as num).toDouble();
+                                final newP = (data['predicted_next_correct'] as num).toDouble();
+                                _bktMasteryMap[sub.subchapterId] = newM;
+                                _bktPredNextMap[sub.subchapterId] = newP;
+                                setModalState(() {
+                                  currentMastery = newM;
+                                  currentPred = newP;
+                                });
+                                setState(() {});
+                              }
+                            } catch (_) {}
+                          },
+                          icon: const Icon(Icons.check_circle_outline, size: 18),
+                          label: Text("I Mastered This (Correct)", style: GoogleFonts.shareTechMono(fontSize: 12)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: DarkAcademiaPalette.forestMoss,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            try {
+                              final resp = await http.post(
+                                Uri.parse("$_baseUrl/api/bkt/update"),
+                                headers: {"Content-Type": "application/json"},
+                                body: jsonEncode({
+                                  "prior_mastery": currentMastery,
+                                  "is_correct": false,
+                                  "p_transit": 0.15,
+                                  "p_guess": 0.20,
+                                  "p_slip": 0.10,
+                                }),
+                              );
+                              if (resp.statusCode == 200) {
+                                final data = jsonDecode(resp.body);
+                                final newM = (data['updated_mastery'] as num).toDouble();
+                                final newP = (data['predicted_next_correct'] as num).toDouble();
+                                _bktMasteryMap[sub.subchapterId] = newM;
+                                _bktPredNextMap[sub.subchapterId] = newP;
+                                setModalState(() {
+                                  currentMastery = newM;
+                                  currentPred = newP;
+                                });
+                                setState(() {});
+                              }
+                            } catch (_) {}
+                          },
+                          icon: const Icon(Icons.refresh, size: 18),
+                          label: Text("Need Practice (Review)", style: GoogleFonts.shareTechMono(fontSize: 12)),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: DarkAcademiaPalette.caputMortuum,
+                            side: const BorderSide(color: DarkAcademiaPalette.caputMortuum),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1323,6 +1531,25 @@ class _PdfFocusDiagnosticScreenState extends State<PdfFocusDiagnosticScreen> {
           const SizedBox(height: 12),
 
           // Action Buttons: Deep Dive in Chat & Make Flashcards
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => _openBktMasterySheet(sub),
+              icon: const Icon(Icons.psychology_outlined, size: 16),
+              label: Text(
+                "Adaptive Mastery Check (BKT) - ${((_bktMasteryMap[sub.subchapterId] ?? 0.35) * 100).toStringAsFixed(0)}% Mastered",
+                style: GoogleFonts.shareTechMono(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isDark ? DarkAcademiaPalette.spaceCadet : DarkAcademiaPalette.vintageMaroon,
+                foregroundColor: Colors.white,
+                side: const BorderSide(color: DarkAcademiaPalette.fadedGold, width: 1),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
           Row(
             children: [
               Expanded(

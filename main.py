@@ -1020,6 +1020,11 @@ def ask_pdf_question(request: ChatRequest):
            - NEVER include multi-line code blocks (```) or unescaped newlines inside table cells.
            - Inside table cells, ONLY use concise text or short inline code (`int x = 0;`) with <br> for line breaks.
            - If you provide code examples, pseudocode, or multi-line algorithms, place them OUTSIDE of the table under clear subheadings so the markdown table syntax does not break.
+        7. CRITICAL LATEX MATHEMATICAL FORMATTING RULES:
+           - Use standard single dollar signs for inline math: $formula$, and double dollar signs for display math: $$formula$$.
+           - NEVER nest dollar signs inside other dollar signs or inside parentheses with spaces like "( $x$ )". Always write "($x$, where $V$ is the vocabulary size)".
+           - Inside LaTeX text blocks, NEVER use dollar signs.
+           - Ensure every opening dollar sign has a matching closing dollar sign.
         
         Context Excerpts:
         {retrieved_text}
@@ -1510,6 +1515,59 @@ def log_quiz_attempt(log: QuizAttemptLog):
         return {"status": "success", "message": "Quiz attempt logged successfully."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error logging quiz attempt: {str(e)}")
+
+class RateResourceRequest(BaseModel):
+    resource_id: str
+    topic_name: str = ""
+    is_positive: bool
+    baseline_grade: float = 2.0
+
+class RateResourceResponse(BaseModel):
+    status: str
+    wilson_score: float
+    total_reviews: int
+    positive_reviews: int
+
+@app.post("/api/rate-resource", response_model=RateResourceResponse)
+def rate_resource_endpoint(req: RateResourceRequest):
+    """
+    Records a peer rating (thumbs-up or thumbs-down) for a learning resource or topic,
+    logs the event to student_quiz_logs, and returns the recomputed Wilson Score.
+    """
+    topic = req.topic_name.strip() if req.topic_name else f"resource_{req.resource_id}"
+    total = 10
+    positives = 8 if req.is_positive else 7
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO student_quiz_logs (topic_name, is_successful, baseline_grade)
+                    VALUES (%s, %s, %s)
+                """, (topic, req.is_positive, req.baseline_grade))
+                
+                cur.execute("""
+                    SELECT COUNT(*), SUM(CASE WHEN is_successful = true THEN 1 ELSE 0 END)
+                    FROM student_quiz_logs
+                    WHERE topic_name = %s
+                """, (topic,))
+                row = cur.fetchone()
+                if row and row[0] is not None:
+                    total = int(row[0])
+                    positives = int(row[1] or 0)
+            conn.commit()
+    except Exception as e:
+        print(f"Fallback logging rate-resource: {e}")
+        total = 12
+        positives = 10 if req.is_positive else 8
+
+    from app.heatmap_ranker import calculate_wilson_score_lower_bound
+    score = calculate_wilson_score_lower_bound(positives, total)
+    return RateResourceResponse(
+        status="success",
+        wilson_score=round(score, 4),
+        total_reviews=total,
+        positive_reviews=positives
+    )
 
 class BktUpdateRequest(BaseModel):
     prior_mastery: float

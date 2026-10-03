@@ -116,6 +116,12 @@ class HomeScreen extends StatelessWidget {
                                   ),
                                 ],
                               ),
+                              const SizedBox(height: 20),
+                              _buildDiagnosticRadarBentoCard(
+                                context: context,
+                                isDark: isDark,
+                                onNavigate: () => onNavigate(4),
+                              ),
                             ],
                           );
                         } else {
@@ -138,6 +144,12 @@ class HomeScreen extends StatelessWidget {
                                 context: context,
                                 isDark: isDark,
                                 onNavigate: () => onNavigate(3),
+                              ),
+                              const SizedBox(height: 16),
+                              _buildDiagnosticRadarBentoCard(
+                                context: context,
+                                isDark: isDark,
+                                onNavigate: () => onNavigate(4),
                               ),
                             ],
                           );
@@ -590,7 +602,107 @@ class HomeScreen extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildDiagnosticRadarBentoCard({
+    required BuildContext context,
+    required bool isDark,
+    required VoidCallback onNavigate,
+  }) {
+    return InkWell(
+      onTap: onNavigate,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(22),
+        decoration: BoxDecoration(
+          color: isDark 
+              ? const Color(0xFF1E2024).withValues(alpha: 0.85) 
+              : const Color(0xFFF9F7F2).withValues(alpha: 0.95),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDark 
+                ? DarkAcademiaPalette.fadedGold.withValues(alpha: 0.35) 
+                : DarkAcademiaPalette.tan.withValues(alpha: 0.6),
+            width: 1.2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: isDark 
+                  ? Colors.black.withValues(alpha: 0.35) 
+                  : DarkAcademiaPalette.oxfordBrown.withValues(alpha: 0.05),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: DarkAcademiaPalette.forestMoss.withValues(alpha: isDark ? 0.3 : 0.15),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: DarkAcademiaPalette.forestMoss.withValues(alpha: 0.5),
+                ),
+              ),
+              child: Icon(
+                Icons.radar_rounded,
+                size: 32,
+                color: isDark ? DarkAcademiaPalette.fadedGold : DarkAcademiaPalette.forestMoss,
+              ),
+            ),
+            const SizedBox(width: 18),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        "04 // EXAM RADAR & DIAGNOSTICS",
+                        style: GoogleFonts.shareTechMono(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? DarkAcademiaPalette.fadedGold : DarkAcademiaPalette.caputMortuum,
+                          letterSpacing: 1.1,
+                        ),
+                      ),
+                      const Spacer(),
+                      _buildMiniPill(isDark, Icons.psychology_outlined, "BKT Mastery"),
+                      const SizedBox(width: 6),
+                      _buildMiniPill(isDark, Icons.filter_center_focus, "Cognitive Lenses"),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "Chapter Diagnostic Radar & Adaptive Focus",
+                    style: GoogleFonts.cinzel(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? DarkAcademiaPalette.antiqueIvory : DarkAcademiaPalette.spaceCadet,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    "Analyze PDF chapters with the Diagnostic Radar. Switch between 4 Cognitive Lenses, practice with Bayesian Knowledge Tracing (BKT), and generate deep-dive flashcards.",
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      color: isDark ? DarkAcademiaPalette.antiqueIvory.withValues(alpha: 0.75) : DarkAcademiaPalette.oxfordBrown,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Icon(
+              Icons.arrow_forward_rounded,
+              size: 20,
+              color: isDark ? DarkAcademiaPalette.fadedGold : DarkAcademiaPalette.caputMortuum,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
-
-
-
