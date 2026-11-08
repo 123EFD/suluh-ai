@@ -44,35 +44,8 @@ VERIFIED_COLLEGIATE_CHANNELS = {
 _YOUTUBE_CACHE: Dict[str, Dict[str, Any]] = {}
 CACHE_TTL_SECONDS = 86400  # 24-hour Time-To-Live to conserve quota
 
-
-# ==============================================================================
-# [BLANK 2]: Relevance-Scored Video Selection & Cache-Aside Filter
-# Task: Given a target CS topic and candidate YouTube videos retrieved from the
-# YouTube Data API v3 or educational video search, calculate a lexical and semantic
-# title-matching score (Jaccard token similarity + Levenshtein distance), grant priority
-# weights to verified university channels (e.g. MIT OpenCourseWare, Stanford Online, Harvard,
-# freeCodeCamp, CrashCourse, Computerphile), select the most pedagogically relevant video,
-# and persist the selection in the LRU cache with a 24-hour TTL (Time-To-Live).
-#
-# Input:
-#   topic: str - Educational topic query (e.g., "Dijkstra algorithm lecture")
-#   candidates: List[Dict[str, str]] - [{title, video_id, channel, description}]
-# Output:
-#   Optional[Dict[str, str]] - Winning candidate video object with direct URL
-# ==============================================================================
 def rank_and_cache_video_selection(topic: str, candidates: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
 
-    # --------------------------------------------------------------------------
-    # [BLANK 2 - TODO FOR LEARNER]:
-    # 1. Normalize the topic string into lowercase words (stopwords excluded).
-    # 2. For each video in candidates:
-    #      a. Compute Jaccard Index = len(topic_tokens & title_tokens) / len(topic_tokens | title_tokens)
-    #      b. Check if video['channel'].lower() matches any in VERIFIED_COLLEGIATE_CHANNELS (+0.3 bonus)
-    #      c. Check for educational keywords ("lecture", "tutorial", "algorithm", "cs") (+0.1 bonus)
-    # 3. Identify the candidate with the highest overall relevance score.
-    # 4. Save the winner to _YOUTUBE_CACHE[topic.lower()] with {"url": ..., "timestamp": time.time()}.
-    # 5. Return the winner dict.
-    # --------------------------------------------------------------------------
     if not candidates:
         return None
 

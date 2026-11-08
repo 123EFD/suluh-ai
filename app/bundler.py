@@ -41,6 +41,7 @@ class ResourceItem(BaseModel):
     duration_min: int
     type: str
     content: str
+    title: Optional[str] = None
 
 def _open() -> sqlite3.Connection:
     return sqlite3.connect(DB_PATH)
@@ -79,6 +80,8 @@ def _is_academically_substantive(content: str, rtype: str) -> bool:
         ans = low.split("**back:**", 1)[1].strip()
         if len(ans) < 35:
             return False
+
+    return True
 
 def _is_topically_relevant(content: str, keywords: List[str], negative_keywords: Optional[List[str]] = None) -> bool:
     """
@@ -134,7 +137,9 @@ def create_bundle(req: BundleRequest):
                     norm_type = "pdf"
                 else:
                     norm_type = "reading"
-                candidates.append((f"neon_{len(candidates)+1}", rows[0], 10, norm_type, rows[2]))
+                res_title = (rows[0] or "").strip() or canonical_topic
+                res_subject = (rows[1] or "").strip() or canonical_topic
+                candidates.append((f"neon_{len(candidates)+1}", res_subject, 10, norm_type, rows[2], res_title))
         except Exception as e:
             # Non-fatal log so offline development continues smoothly
             print(f"Warning: Neon DB lookup bypassed in bundler: {e}")
@@ -153,7 +158,8 @@ def create_bundle(req: BundleRequest):
     # Apply both Bloom's depth filter and Semantic Relevance keyword guard
     for c in sqlite_candidates:
         if _is_academically_substantive(c[4], c[3]) and _is_topically_relevant(c[4], keywords, negative_keywords):
-            candidates.append(c)
+            c_title = f"{c[1]} Study Document" if c[3] in ('pdf', 'book', 'reading') else c[1]
+            candidates.append((c[0], c[1], c[2], c[3], c[4], c_title))
 
     # 3. Prerequisite DAG Fallback (Pedagogical Sourcing instead of General CS)
     # If candidate pool is too small to fulfill time budget, query foundational prerequisite courses
@@ -179,12 +185,14 @@ def create_bundle(req: BundleRequest):
             for p_item in prereq_items:
                 if _is_academically_substantive(p_item[4], p_item[3]) and _is_topically_relevant(p_item[4], p_keywords, p_negatives):
                     # Tag clearly as a foundational prerequisite item
+                    p_title = f"{prereq_course_name} Prerequisite Module"
                     candidates.append((
                         p_item[0],
                         f"{canonical_topic} (Prerequisite: {prereq_course_name})",
                         p_item[2],
                         p_item[3],
-                        p_item[4]
+                        p_item[4],
+                        p_title
                     ))
 
     # 4. Partition candidates into categories to ensure curriculum diversity
@@ -195,12 +203,14 @@ def create_bundle(req: BundleRequest):
         try:
             live_vid = search_youtube_live(canonical_topic)
             if live_vid and "url" in live_vid:
+                yt_title = live_vid.get("title", f"{canonical_topic} Lecture")
                 live_item = (
                     f"live_yt_{int(time.time())}",
                     canonical_topic,
                     15,
                     "video",
-                    live_vid["url"]
+                    live_vid["url"],
+                    yt_title
                 )
                 videos.append(live_item)
                 candidates.append(live_item)
@@ -233,9 +243,17 @@ def create_bundle(req: BundleRequest):
             return False
         return True
 
-    def _add_item(rid: str, topic_name: str, dur: int, rtype: str, content: str):
+    def _add_item(rid: str, topic_name: str, dur: int, rtype: str, content: str, title: Optional[str] = None):
         nonlocal total
-        bundle.append(ResourceItem(resource_id=rid, topic=topic_name, duration_min=dur, type=rtype, content=content))
+        resolved_title = title if title and not title.lower().startswith("neon_") else topic_name
+        bundle.append(ResourceItem(
+            resource_id=rid,
+            topic=topic_name,
+            duration_min=dur,
+            type=rtype,
+            content=content,
+            title=resolved_title
+        ))
         total += dur
         seen_ids.add(rid)
         key = _normalize_content_key(content)
@@ -246,9 +264,13 @@ def create_bundle(req: BundleRequest):
     pools = [videos, readings, pyqs, flashcards, others]
     for pool in pools:
         for c in pool:
-            rid, topic_name, dur, rtype, content = c
+            if len(c) >= 6:
+                rid, topic_name, dur, rtype, content, item_title = c[:6]
+            else:
+                rid, topic_name, dur, rtype, content = c[:5]
+                item_title = None
             if total + dur <= req.minutes_available and _can_add(rid, content):
-                _add_item(rid, topic_name, dur, rtype, content)
+                _add_item(rid, topic_name, dur, rtype, content, item_title)
                 break
 
     # 2. Wilson Score Priority Phase: Query real peer recovery logs to prioritize threshold concepts
@@ -271,7 +293,14 @@ def create_bundle(req: BundleRequest):
 
     remaining_candidates = [c for c in candidates if _can_add(c[0], c[4])]
     cand_dicts = [
-        {"resource_id": c[0], "topic": c[1], "duration_min": c[2], "type": c[3], "content": c[4]}
+        {
+            "resource_id": c[0],
+            "topic": c[1],
+            "duration_min": c[2],
+            "type": c[3],
+            "content": c[4],
+            "title": c[5] if len(c) >= 6 else c[1]
+        }
         for c in remaining_candidates
     ]
     # Rank candidates by peer-validated Wilson Score confidence interval
@@ -282,8 +311,9 @@ def create_bundle(req: BundleRequest):
         dur = item["duration_min"]
         rtype = item["type"]
         cnt = item["content"]
+        item_title = item.get("title", tname)
         if total + dur <= req.minutes_available and _can_add(rid, cnt):
-            _add_item(rid, tname, dur, rtype, cnt)
+            _add_item(rid, tname, dur, rtype, cnt, item_title)
         if total >= req.minutes_available:
             break
 
