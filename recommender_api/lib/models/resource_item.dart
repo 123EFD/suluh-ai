@@ -4,6 +4,7 @@ class ResourceItem {
   final int durationMin;
   final String type;
   final String content;
+  final String? title;
 
   ResourceItem({
     required this.resourceId,
@@ -11,16 +12,17 @@ class ResourceItem {
     required this.durationMin,
     required this.type,
     required this.content,
+    this.title,
   });
 
   factory ResourceItem.fromJson(Map<String, dynamic> json) {
     return ResourceItem(
-       // ... your mapping here (e.g. resourceId: json['resource_id'] as String)
-      resourceId: json['resource_id'] as String,
-      topic: json['topic'] as String,
-      durationMin: json['duration_min'] as int,
-      type: json['type'] as String,
-      content: json['content'] as String,
+      resourceId: json['resource_id'] as String? ?? '',
+      topic: json['topic'] as String? ?? '',
+      durationMin: json['duration_min'] as int? ?? json['duration'] as int? ?? 10,
+      type: json['type'] as String? ?? 'reading',
+      content: json['content'] as String? ?? '',
+      title: json['title'] as String?,
     );
   }
 
@@ -29,8 +31,10 @@ class ResourceItem {
       'resource_id': resourceId,
       'topic': topic,
       'duration': durationMin,
+      'duration_min': durationMin,
       'type': type,
       'content': content,
+      if (title != null) 'title': title,
     };
   }
 }

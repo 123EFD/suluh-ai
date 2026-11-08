@@ -229,9 +229,20 @@ class StudySessionScreen extends StatelessWidget {
       typeIcon = Icons.menu_book_outlined;
     }
 
-    final displayTitle = (item.resourceId.isNotEmpty && int.tryParse(item.resourceId) == null)
-        ? item.resourceId
-        : "${item.topic} Document";
+    // Never display database row keys (e.g. "neon_1", "neon_2") as the title
+    String displayTitle;
+    if (item.title != null && item.title!.trim().isNotEmpty && !item.title!.toLowerCase().startsWith('neon_')) {
+      displayTitle = item.title!.trim();
+    } else if (item.topic.isNotEmpty && !item.topic.toLowerCase().startsWith('neon_') && int.tryParse(item.topic) == null) {
+      displayTitle = item.topic.trim();
+    } else {
+      displayTitle = "${item.topic} Document";
+    }
+
+    String displaySubtitle = "";
+    if (item.topic.isNotEmpty && item.topic.trim().toLowerCase() != displayTitle.toLowerCase() && !item.topic.toLowerCase().startsWith('neon_')) {
+      displaySubtitle = "Subject: ${item.topic}";
+    }
 
     return Container(
       decoration: BoxDecoration(
@@ -309,16 +320,16 @@ class StudySessionScreen extends StatelessWidget {
               color: isDark ? Colors.white : DarkAcademiaPalette.caputMortuum,
             ),
           ),
-          const SizedBox(height: 6),
-
-          // Topic
-          Text(
-            "Subject: ${item.topic}",
-            style: GoogleFonts.shareTechMono(
-              fontSize: 12,
-              color: isDark ? DarkAcademiaPalette.slateGray : DarkAcademiaPalette.coffee,
+          if (displaySubtitle.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              displaySubtitle,
+              style: GoogleFonts.shareTechMono(
+                fontSize: 12,
+                color: isDark ? DarkAcademiaPalette.slateGray : DarkAcademiaPalette.coffee,
+              ),
             ),
-          ),
+          ],
           const SizedBox(height: 16),
 
           // Action or Content

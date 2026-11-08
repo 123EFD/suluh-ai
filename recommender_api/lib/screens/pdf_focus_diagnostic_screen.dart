@@ -599,6 +599,7 @@ class _PdfFocusDiagnosticScreenState extends State<PdfFocusDiagnosticScreen> {
             durationMin: item['duration_min'] ?? 5,
             type: 'flashcard',
             content: item['content'] ?? '',
+            title: item['title'] ?? item['topic'] ?? sub.title,
           ));
         }
       }
@@ -622,6 +623,7 @@ class _PdfFocusDiagnosticScreenState extends State<PdfFocusDiagnosticScreen> {
               durationMin: vidData['duration_min'] ?? 15,
               type: 'video',
               content: vidData['url'],
+              title: vidData['title'] ?? sub.title,
             ));
           }
         }

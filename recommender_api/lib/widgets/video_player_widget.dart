@@ -13,9 +13,22 @@ class VideoPlayerWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isUrl = item.content.trim().startsWith('http://') || item.content.trim().startsWith('https://');
-    final displayTitle = (item.resourceId.isNotEmpty && int.tryParse(item.resourceId) == null)
-        ? item.resourceId
-        : "${item.topic} Lecture";
+
+    // Never display database row keys (e.g. "neon_1", "live_yt_...") as the title
+    String displayTitle;
+    if (item.title != null && item.title!.trim().isNotEmpty && !item.title!.toLowerCase().startsWith('neon_')) {
+      displayTitle = item.title!.trim();
+    } else if (item.topic.isNotEmpty && !item.topic.toLowerCase().startsWith('neon_') && int.tryParse(item.topic) == null) {
+      displayTitle = item.topic.trim();
+    } else {
+      displayTitle = "${item.topic} Lecture";
+    }
+
+    // Subtitle displays the subject / course domain if distinct from the title
+    String displaySubtitle = "";
+    if (item.topic.isNotEmpty && item.topic.trim().toLowerCase() != displayTitle.toLowerCase() && !item.topic.toLowerCase().startsWith('neon_')) {
+      displaySubtitle = "Subject: ${item.topic}";
+    }
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -89,16 +102,16 @@ class VideoPlayerWidget extends StatelessWidget {
                 height: 1.3,
               ),
             ),
-            const SizedBox(height: 6),
-
-            // Topic Tag
-            Text(
-              "Topic: ${item.topic}",
-              style: GoogleFonts.shareTechMono(
-                color: isDark ? DarkAcademiaPalette.slateGray : DarkAcademiaPalette.coffee,
-                fontSize: 12,
+            if (displaySubtitle.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                displaySubtitle,
+                style: GoogleFonts.shareTechMono(
+                  color: isDark ? DarkAcademiaPalette.slateGray : DarkAcademiaPalette.coffee,
+                  fontSize: 12,
+                ),
               ),
-            ),
+            ],
             const SizedBox(height: 20),
 
             // Video Preview / Action Card
