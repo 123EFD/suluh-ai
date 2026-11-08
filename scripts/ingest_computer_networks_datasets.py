@@ -36,7 +36,12 @@ def ingest_neteval_dataset(conn: sqlite3.Connection):
     print("Loading NASP/neteval-exam dataset from Hugging Face...")
     try:
         from datasets import load_dataset
-        ds = load_dataset("NASP/neteval-exam", split="train")
+        # Pinned immutable commit revision to prevent CWE-494 supply chain risks (Bandit B615)
+        ds = load_dataset(
+            "NASP/neteval-exam",
+            split="train",
+            revision="94d6ca8da4db57a1edae583f820a98ce7b13e0c3"
+        )
     except Exception as e:
         print(f"Error loading neteval-exam: {e}")
         return

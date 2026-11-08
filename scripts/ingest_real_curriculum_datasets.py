@@ -146,7 +146,13 @@ def ingest_c_programming_dataset(conn: sqlite3.Connection, target_count: int = 1
     print(f"Streaming verified C Programming Q&A from Mxode/StackOverflow-QA-C-Language-40k...")
     try:
         from datasets import load_dataset
-        ds = load_dataset("Mxode/StackOverflow-QA-C-Language-40k", split="train", streaming=True)
+        # Pinned immutable commit revision to prevent CWE-494 supply chain risks (Bandit B615)
+        ds = load_dataset(
+            "Mxode/StackOverflow-QA-C-Language-40k",
+            split="train",
+            streaming=True,
+            revision="2ce7b1d521b4fa46db9d030a29a4a9696f3cc5ee"
+        )
     except Exception as e:
         print(f"Error loading Hugging Face dataset: {e}")
         return
