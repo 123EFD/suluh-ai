@@ -206,14 +206,27 @@ The user interface is crafted around a cohesive **Dark Academia Collegiate Palet
 
 ```
 recommender-api/
-├── main.py                          # FastAPI ASGI application, RAG endpoints, PDF focus engine
+├── main.py                          # Lean FastAPI ASGI orchestrator (~80 lines)
 ├── app/
+│   ├── core/                        # Central environment configuration & database access
+│   │   ├── config.py                # Environment variables, constants & textbook registry
+│   │   └── database.py              # PostgreSQL/SQLite connection pools & table migration
+│   ├── models/                      # Pydantic schemas & PyTorch model definitions
+│   │   ├── schemas.py               # Request/Response data validation schemas
+│   │   └── ml_model.py              # PyTorch MLP student risk predictor & scaler loader
+│   ├── services/                    # Core business logic & singleton AI services
+│   │   ├── embedding_service.py     # SentenceTransformer & CrossEncoder lazy loaders
+│   │   ├── llm_service.py           # Groq API client & query optimizer
+│   │   └── pdf_service.py           # PyMuPDF TOC extraction, page slicing & citations
+│   ├── routers/                     # Domain-driven modular FastAPI APIRouters
+│   │   ├── predict.py               # /predict & /analytics/global endpoints
+│   │   ├── documents.py             # /upload-pdf, /library, /get-pdf, /rename-pdf, etc.
+│   │   ├── chat.py                  # /chat hybrid RAG, /save-message, /get-chat, etc.
+│   │   ├── diagnostics.py           # /api/analyze-pdf-focus, /api/resolve-course-pdf, etc.
+│   │   └── pedagogy.py              # /api/heatmap, /api/rate-resource, /api/bkt/update, etc.
 │   ├── bundler.py                   # 0/1 Knapsack study bundle generation & deduplication
 │   ├── video_link.py                # Live YouTube API v3 search, 24h cache-aside & ranker
 │   ├── lens_switcher.py             # Cognitive lens transformations (Analogy, Visual, Exam)
-│   ├── groq_client.py               # Tiered Groq LLM inference cascade wrapper
-│   ├── database.py                  # Neon PostgreSQL & pgvector connection handling
-│   └── models.py                    # Pydantic schemas & SQLAlchemy ORM models
 ├── recommender_api/                 # Flutter Web frontend workspace
 │   ├── lib/
 │   │   ├── main.dart                # App shell, Dark Academia navigation vault & profile
@@ -244,7 +257,7 @@ recommender-api/
 │   └── MIND_MAP_README.md           # Mind map implementation guide
 ├── resources.db                     # SQLite micro-learning resources & past exam questions
 ├── requirements.txt                 # Backend Python dependencies
-├── Dockerfile                       # Container deployment definition
+├── Dockerfile                       # Container deployment definition (powered by uv)
 └── README.md                        # Primary GitHub repository landing page README
 ```
 
@@ -279,6 +292,10 @@ recommender-api/
 
 3. Install required dependencies:
    ```bash
+   # Ultra-fast installation with uv (recommended):
+   uv pip install -r requirements.txt
+
+   # Or standard pip:
    pip install -r requirements.txt
    ```
 
