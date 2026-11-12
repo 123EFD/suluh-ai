@@ -29,8 +29,8 @@ class LensLRUTTLCache:
         self.tail.prev = self.head
 
     def _generate_key(self, lens: str, topic: str, content: str) -> str:
-        """Constructs a deterministic composite key using MD5 hashing."""
-        content_hash = hashlib.md5(content.encode("utf-8")).hexdigest()
+        """Constructs a deterministic composite key using non-cryptographic MD5 hashing."""
+        content_hash = hashlib.md5(content.encode("utf-8"), usedforsecurity=False).hexdigest()
         return f"{lens.strip().lower()}::{topic.strip().lower()}::{content_hash}"
 
     def _add_node_to_head(self, node: Node) -> None:
