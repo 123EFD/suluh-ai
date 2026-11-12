@@ -14,6 +14,8 @@ from app.models.schemas import (
     BktUpdateRequest,
     BktUpdateResponse,
     TimestampMapRequest,
+    PyqPhotoScanRequest,
+    PyqPhotoScanResponse,
     MermaidValidateRequest,
     MindMapRequest
 )
@@ -217,6 +219,21 @@ def map_pyq_timestamp_endpoint(req: TimestampMapRequest):
     from app.timestamp_mapper import parse_srt_subtitles, map_exam_question_to_video_timestamp
     parsed_subs = parse_srt_subtitles(req.srt_subtitles)
     return map_exam_question_to_video_timestamp(req.question_text, parsed_subs, req.window_size)
+
+@router.post("/api/scan-pyq-photo", response_model=PyqPhotoScanResponse)
+def scan_pyq_photo_endpoint(req: PyqPhotoScanRequest):
+    """Multimodal PYQ Photo Scanner: digitizes exam questions via Vision LLM and aligns video timestamps."""
+    from app.photo_scanner import scan_pyq_exam_photo
+    try:
+        result = scan_pyq_exam_photo(
+            image_base64=req.image_base64,
+            course_code=req.course_code,
+            srt_subtitles=req.srt_subtitles,
+            window_size=req.window_size
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Multimodal PYQ scan error: {str(e)}")
 
 @router.post("/api/sanitize-mermaid")
 def sanitize_mermaid_endpoint(req: MermaidValidateRequest):

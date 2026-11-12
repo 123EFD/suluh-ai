@@ -74,6 +74,7 @@ class TestBackendArchitecture(unittest.TestCase):
             "/api/log-quiz-attempt",
             "/api/bkt/update",
             "/api/map-pyq-timestamp",
+            "/api/scan-pyq-photo",
             "/api/sanitize-mermaid",
         ]
 
@@ -216,6 +217,15 @@ Dynamic memory allocation uses malloc and free.
         match = map_exam_question_to_video_timestamp("How does a pointer store a memory address?", subs, window_size=2)
         self.assertGreater(match["similarity_score"], 0.0)
         self.assertEqual(match["timestamp_sec"], 70.0)
+
+    def test_photo_scanner_normalization(self):
+        """Verify base64 data URI normalization and schema generation in photo scanner."""
+        from app.photo_scanner import normalize_base64_image
+        raw = "abc123xyz"
+        uri = normalize_base64_image(raw)
+        self.assertEqual(uri, "data:image/jpeg;base64,abc123xyz")
+        already_uri = "data:image/png;base64,12345"
+        self.assertEqual(normalize_base64_image(already_uri), already_uri)
 
 if __name__ == "__main__":
     unittest.main()

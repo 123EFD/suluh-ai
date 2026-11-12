@@ -106,6 +106,24 @@ class TimestampMapRequest(BaseModel):
     srt_subtitles: str
     window_size: int = 3
 
+class ScannedQuestionData(BaseModel):
+    question_text: str
+    core_concept: str
+    question_type: str = "short_answer"  # "multiple_choice", "code_trace", "short_answer", "proof"
+    extracted_code: Optional[str] = None
+    summary: str
+
+class PyqPhotoScanRequest(BaseModel):
+    image_base64: str  # Data URI (e.g. data:image/jpeg;base64,...) or raw base64 string
+    course_code: Optional[str] = None
+    srt_subtitles: Optional[str] = None
+    window_size: int = 3
+
+class PyqPhotoScanResponse(BaseModel):
+    status: str
+    scanned_question: ScannedQuestionData
+    timestamp_mapping: Optional[Dict[str, Any]] = None
+
 class MermaidValidateRequest(BaseModel):
     raw_mermaid: str
 
