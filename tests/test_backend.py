@@ -160,5 +160,62 @@ class TestBackendArchitecture(unittest.TestCase):
             self.assertNotIn("dynamic programming", content_lower)
             self.assertNotIn("square root of", content_lower)
 
+    def test_lens_lru_ttl_cache(self):
+        """Verify LRU capacity eviction and TTL expiry in LensLRUTTLCache."""
+        from app.lens_cache import LensLRUTTLCache
+
+        cache = LensLRUTTLCache(capacity=2, ttl_seconds=10.0)
+        cache.put("lens", "topic", "content1", "transformed1")
+        cache.put("lens", "topic", "content2", "transformed2")
+        self.assertEqual(cache.get("lens", "topic", "content1"), "transformed1")
+
+        # Adding a 3rd item should evict content2 (since content1 was accessed and promoted to MRU)
+        cache.put("lens", "topic", "content3", "transformed3")
+        self.assertIsNone(cache.get("lens", "topic", "content2"))
+        self.assertEqual(cache.get("lens", "topic", "content1"), "transformed1")
+        self.assertEqual(cache.get("lens", "topic", "content3"), "transformed3")
+
+    def test_knowledge_tracing_bkt(self):
+        """Verify Bayesian Knowledge Tracing updates and trajectory tracing."""
+        from app.knowledge_tracing import update_bkt_mastery, predict_next_correct_probability, trace_mastery_trajectory
+
+        # Correct response should increase mastery
+        prior = 0.20
+        post_correct = update_bkt_mastery(prior, is_correct=True)
+        self.assertGreater(post_correct, prior)
+
+        # Incorrect response should decrease or dampen mastery
+        post_incorrect = update_bkt_mastery(prior, is_correct=False)
+        self.assertLess(post_incorrect, post_correct)
+
+        # Trajectory of correct responses should monotonically trend upward
+        traj = trace_mastery_trajectory([True, True, True], initial_prior=0.10)
+        self.assertEqual(len(traj), 3)
+        self.assertTrue(traj[0] < traj[1] < traj[2])
+
+    def test_timestamp_mapper(self):
+        """Verify SRT parsing and sliding window exam question timestamp mapping."""
+        from app.timestamp_mapper import parse_srt_subtitles, map_exam_question_to_video_timestamp
+
+        sample_srt = """1
+00:01:10,000 --> 00:01:15,000
+In this lecture we discuss pointers in C programming.
+
+2
+00:01:16,000 --> 00:01:25,000
+A pointer stores the memory address of another variable.
+
+3
+00:01:26,000 --> 00:01:35,000
+Dynamic memory allocation uses malloc and free.
+"""
+        subs = parse_srt_subtitles(sample_srt)
+        self.assertEqual(len(subs), 3)
+        self.assertAlmostEqual(subs[0]["start_sec"], 70.0)
+
+        match = map_exam_question_to_video_timestamp("How does a pointer store a memory address?", subs, window_size=2)
+        self.assertGreater(match["similarity_score"], 0.0)
+        self.assertEqual(match["timestamp_sec"], 70.0)
+
 if __name__ == "__main__":
     unittest.main()
