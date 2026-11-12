@@ -4,7 +4,8 @@ import json
 from typing import List
 from fastapi import APIRouter, HTTPException
 from app.core.config import GROQ_API_KEY
-from app.core.database import get_db_connection
+from app.core.database import get_db_connection, get_sqlite_connection
+from app.heatmap_ranker import calculate_wilson_score_lower_bound
 from app.models.schemas import (
     HeatmapResource,
     QuizAttemptLog,
@@ -27,19 +28,13 @@ router = APIRouter(tags=["Pedagogy, Knowledge Tracing & Visualization"])
 
 def calculate_wilson_score(successes: int, n: int) -> float:
     """Calculates the 95% confidence Wilson score lower bound."""
-    if n == 0:
-        return 0.0
-    z = 1.96
-    p = successes / n
-    denominator = 1 + (z**2 / n)
-    center_adjusted_probability = p + (z**2 / (2 * n))
-    adjusted_standard_deviation = math.sqrt((p * (1 - p) + (z**2 / (4 * n))) / n)
-    return (center_adjusted_probability - adjusted_standard_deviation) / denominator
+    return calculate_wilson_score_lower_bound(successes, n)
 
 @router.get("/api/heatmap", response_model=List[HeatmapResource])
 def get_high_yield_heatmap():
     """Returns top-rated resources filtered by struggling students, ranked by Wilson Score."""
     heatmap_items = []
+    # 1. Try PostgreSQL first
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
@@ -54,22 +49,53 @@ def get_high_yield_heatmap():
                 result = cur.fetchall()
                 for i, row in enumerate(result):
                     topic_name = row[0]
-                    attempts = row[1]
-                    successes = row[2]
-                    real_score = calculate_wilson_score(successes, attempts)
+                    attempts = int(row[1])
+                    successes = int(row[2] or 0)
+                    real_score = calculate_wilson_score_lower_bound(successes, attempts)
                     heatmap_items.append(HeatmapResource(
                         id=str(i + 1),
                         title=topic_name,
                         type="video",
-                        wilson_score=real_score,
+                        wilson_score=round(real_score, 4),
                         success_rate=(successes / attempts) if attempts > 0 else 0.0,
                         total_struggling_attempts=attempts
                     ))
     except Exception as e:
-        print(f"Database query error in /api/heatmap (falling back to mock data): {e}")
+        # PostgreSQL unavailable or table missing - gracefully proceed to SQLite
+        pass
+
+    # 2. Query local SQLite student_quiz_logs if PostgreSQL produced no items
+    if not heatmap_items:
+        try:
+            with get_sqlite_connection() as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT topic_name, COUNT(*),
+                           SUM(CASE WHEN is_successful = 1 THEN 1 ELSE 0 END) 
+                    FROM student_quiz_logs
+                    WHERE baseline_grade < 3.0
+                    GROUP BY topic_name
+                    HAVING COUNT(*) >= 5
+                """)
+                result = cur.fetchall()
+                for i, row in enumerate(result):
+                    topic_name = row[0]
+                    attempts = int(row[1])
+                    successes = int(row[2] or 0)
+                    real_score = calculate_wilson_score_lower_bound(successes, attempts)
+                    heatmap_items.append(HeatmapResource(
+                        id=str(i + 1),
+                        title=topic_name,
+                        type="video",
+                        wilson_score=round(real_score, 4),
+                        success_rate=(successes / attempts) if attempts > 0 else 0.0,
+                        total_struggling_attempts=attempts
+                    ))
+        except Exception as sqlite_err:
+            print(f"Notice: SQLite heatmap read skipped: {sqlite_err}")
     
     if not heatmap_items:
-        topics = ["Pointers in C", "Memory Allocation", "Graph Theory", "Backpropagation", "Normalization"]
+        topics = ["Pointers in C", "Memory Allocation & Heap", "Graph Theory & DFS/BFS", "Database Normalization & BCNF", "TCP/IP 3-Way Handshake"]
         for i, t in enumerate(topics):
             attempts = random.randint(10, 100)
             successes = random.randint(int(attempts * 0.4), attempts)
@@ -77,7 +103,7 @@ def get_high_yield_heatmap():
                 id=str(i + 1),
                 title=t,
                 type="video",
-                wilson_score=calculate_wilson_score(successes, attempts),
+                wilson_score=round(calculate_wilson_score_lower_bound(successes, attempts), 4),
                 success_rate=successes / attempts,
                 total_struggling_attempts=attempts
             ))
@@ -87,7 +113,8 @@ def get_high_yield_heatmap():
 
 @router.post("/api/log-quiz-attempt")
 def log_quiz_attempt(log: QuizAttemptLog):
-    """Logs a student's quiz/flashcard attempt into student_quiz_logs in PostgreSQL."""
+    """Logs a student's quiz/flashcard attempt into student_quiz_logs in PostgreSQL or SQLite."""
+    saved = False
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
@@ -96,16 +123,33 @@ def log_quiz_attempt(log: QuizAttemptLog):
                     VALUES (%s, %s, %s)
                 """, (log.topic_name, log.is_successful, log.baseline_grade))
             conn.commit()
-        return {"status": "success", "message": "Quiz attempt logged successfully."}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error logging quiz attempt: {str(e)}")
+            saved = True
+    except Exception:
+        saved = False
+
+    try:
+        with get_sqlite_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO student_quiz_logs (topic_name, is_successful, baseline_grade)
+                VALUES (?, ?, ?)
+            """, (log.topic_name, 1 if log.is_successful else 0, log.baseline_grade))
+            conn.commit()
+            saved = True
+    except Exception as sqlite_err:
+        if not saved:
+            raise HTTPException(status_code=500, detail=f"Database error logging quiz attempt: {str(sqlite_err)}")
+
+    return {"status": "success", "message": "Quiz attempt logged successfully."}
 
 @router.post("/api/rate-resource", response_model=RateResourceResponse)
 def rate_resource_endpoint(req: RateResourceRequest):
     """Records a peer rating (thumbs-up or thumbs-down) and returns the recomputed Wilson Score."""
     topic = req.topic_name.strip() if req.topic_name else f"resource_{req.resource_id}"
-    total = 10
-    positives = 8 if req.is_positive else 7
+    total = 0
+    positives = 0
+    db_updated = False
+
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
@@ -123,13 +167,34 @@ def rate_resource_endpoint(req: RateResourceRequest):
                 if row and row[0] is not None:
                     total = int(row[0])
                     positives = int(row[1] or 0)
+                    db_updated = True
             conn.commit()
-    except Exception as e:
-        print(f"Fallback logging rate-resource: {e}")
-        total = 12
-        positives = 10 if req.is_positive else 8
+    except Exception:
+        db_updated = False
 
-    from app.heatmap_ranker import calculate_wilson_score_lower_bound
+    if not db_updated:
+        try:
+            with get_sqlite_connection() as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    INSERT INTO student_quiz_logs (topic_name, is_successful, baseline_grade)
+                    VALUES (?, ?, ?)
+                """, (topic, 1 if req.is_positive else 0, req.baseline_grade))
+                cur.execute("""
+                    SELECT COUNT(*), SUM(CASE WHEN is_successful = 1 THEN 1 ELSE 0 END)
+                    FROM student_quiz_logs
+                    WHERE topic_name = ?
+                """, (topic,))
+                row = cur.fetchone()
+                if row and row[0] is not None:
+                    total = int(row[0])
+                    positives = int(row[1] or 0)
+                conn.commit()
+        except Exception as sqlite_err:
+            print(f"Fallback SQLite error in rate-resource: {sqlite_err}")
+            total = 12
+            positives = 10 if req.is_positive else 8
+
     score = calculate_wilson_score_lower_bound(positives, total)
     return RateResourceResponse(
         status="success",

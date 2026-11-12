@@ -4,6 +4,7 @@ import 'pdf_chat_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert';
+import 'dart:math';
 import 'dart:ui';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
@@ -1727,12 +1728,15 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
       
       // Calculate Wilson Score lower bound
       final total = (current['up'] as int) + (current['down'] as int);
-      final p = (current['up'] as int) / total;
-      const z = 1.96;
-      final denom = 1 + (z * z / total);
-      final center = p + (z * z / (2 * total));
-      final spread = z * (p * (1 - p) / total + (z * z / (4 * total * total)));
-      current['score'] = ((center - (spread > 0 ? (spread > 0 ? 0.05 : 0.0) : 0.0)) / denom).clamp(0.0, 1.0);
+      if (total > 0) {
+        final p = (current['up'] as int) / total;
+        const z = 1.96;
+        final denom = 1.0 + (z * z / total);
+        final center = p + (z * z / (2.0 * total));
+        final inside = (p * (1.0 - p) / total) + (z * z / (4.0 * total * total));
+        final spread = z * sqrt(inside > 0 ? inside : 0.0);
+        current['score'] = ((center - spread) / denom).clamp(0.0, 1.0);
+      }
       _resourceRatings[key] = current;
     });
 
@@ -1746,7 +1750,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
     );
 
     try {
-      await http.post(
+      final res = await http.post(
         Uri.parse("http://127.0.0.1:8000/api/rate-resource"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
@@ -1756,6 +1760,18 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
           "baseline_grade": 2.0,
         }),
       );
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (mounted) {
+          setState(() {
+            current['score'] = (data['wilson_score'] as num?)?.toDouble() ?? current['score'];
+            current['up'] = (data['positive_reviews'] as num?)?.toInt() ?? current['up'];
+            final tot = (data['total_reviews'] as num?)?.toInt() ?? (current['up'] as int);
+            current['down'] = (tot - (current['up'] as int)).clamp(0, 999999);
+            _resourceRatings[key] = current;
+          });
+        }
+      }
     } catch (_) {}
   }
 

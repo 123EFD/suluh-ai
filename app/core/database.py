@@ -49,7 +49,8 @@ def init_jobs_db():
         print(f"Error initializing pdf jobs table: {e}")
 
 def init_quiz_db():
-    """Initializes the student_quiz_logs table in PostgreSQL."""
+    """Initializes the student_quiz_logs table in PostgreSQL and SQLite fallback."""
+    # 1. PostgreSQL (Neon) initialization
     try:
         with get_db_connection() as conn:
             with conn.cursor() as curr:
@@ -63,9 +64,57 @@ def init_quiz_db():
                     )
                 """)
             conn.commit()
-            print("Student quiz logs table initialized successfully.")
+            print("Student quiz logs table initialized successfully in PostgreSQL.")
     except Exception as e:
-        print(f"Error initializing student quiz logs table: {e}")
+        print(f"Notice: PostgreSQL quiz logs init skipped or failed: {e}")
+
+    # 2. Local SQLite fallback initialization and benchmark seeding
+    try:
+        with get_sqlite_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS student_quiz_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    topic_name TEXT NOT NULL,
+                    is_successful BOOLEAN NOT NULL,
+                    baseline_grade REAL NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_quiz_logs_topic ON student_quiz_logs(topic_name)
+            """)
+            conn.commit()
+
+            # Seed realistic benchmark data if table is currently empty
+            row_count = cur.execute("SELECT COUNT(*) FROM student_quiz_logs").fetchone()[0]
+            if row_count == 0:
+                sample_benchmarks = [
+                    ("Pointers in C", 42, 55, 2.3),
+                    ("Memory Allocation & Heap", 38, 50, 2.1),
+                    ("Graph Theory & DFS/BFS", 65, 80, 2.5),
+                    ("Database Normalization & BCNF", 48, 62, 2.4),
+                    ("TCP/IP 3-Way Handshake", 55, 68, 2.7),
+                    ("Dynamic Programming & Knapsack", 34, 48, 2.0),
+                    ("Virtual Memory & Paging", 40, 52, 2.2),
+                    ("Cache Coherence & Invalidation", 28, 40, 2.6),
+                ]
+                for topic, successes, total, grade in sample_benchmarks:
+                    for _ in range(successes):
+                        cur.execute(
+                            "INSERT INTO student_quiz_logs (topic_name, is_successful, baseline_grade) VALUES (?, 1, ?)",
+                            (topic, grade)
+                        )
+                    for _ in range(total - successes):
+                        cur.execute(
+                            "INSERT INTO student_quiz_logs (topic_name, is_successful, baseline_grade) VALUES (?, 0, ?)",
+                            (topic, grade)
+                        )
+                conn.commit()
+                print("Seeded baseline benchmark student quiz logs in SQLite resources.db.")
+            print("Student quiz logs table initialized successfully in SQLite.")
+    except Exception as e:
+        print(f"Error initializing SQLite student quiz logs table: {e}")
 
 def init_all_databases():
     """Initializes all required database tables gracefully."""

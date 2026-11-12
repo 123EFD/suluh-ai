@@ -13,10 +13,9 @@ class LayoutEngine {
     }
 
     // 2. Apply layout algorithms
+    // Note: 'flowchart' map rendering was rejected due to layout defects
+    // (text cut off, isolated map in the corner). It cleanly falls back to hierarchical layout.
     switch (mindMapData.mapType) {
-      case 'flowchart':
-        _layoutFlowchart(mindMapData);
-        break;
       case 'bubble':
         _layoutBubble(mindMapData);
         break;
@@ -26,6 +25,7 @@ class LayoutEngine {
       case 'concept':
         _layoutConcept(mindMapData);
         break;
+      case 'flowchart':
       default:
         _layoutHierarchical(mindMapData);
     }
@@ -212,87 +212,6 @@ class LayoutEngine {
     }
 
     // Normalize coordinates
-    _normalizePositions(mindMapData.nodes, 100, 80);
-  }
-
-  // Flowchart layout
-  static void _layoutFlowchart(MindMapResponseData mindMapData) {
-    if (mindMapData.nodes.isEmpty) return;
-
-    final adjacency = _buildAdjacencyMap(mindMapData.edges);
-    final nodeMap = _buildNodeMap(mindMapData.nodes);
-    final root = _findRoot(mindMapData.nodes, mindMapData.edges);
-    const double verticalGap = 130.0;
-    const double laneOffset = 220.0;
-    double centerX = 800.0;
-    double currentY = 80.0;
-
-    Set<String> visited = {};
-
-    void walk(String nodeId, double xPos) {
-      if (visited.contains(nodeId)) return;
-      visited.add(nodeId);
-
-      final node = nodeMap[nodeId]!;
-      node.position = Offset(xPos - node.size.width / 2, currentY);
-      currentY += node.size.height + verticalGap;
-
-      final children = adjacency[nodeId] ?? [];
-      if (children.length == 1) {
-        walk(children[0], xPos);
-      } else if (children.length == 2) {
-        // decision branch
-        double branchY = currentY;
-
-        // left branch
-        final leftNode = nodeMap[children[0]]!;
-        leftNode.position = Offset(xPos - laneOffset - leftNode.size.width / 2, branchY);
-        visited.add(children[0]);
-
-        // right branch
-        final rightNode = nodeMap[children[1]]!;
-        rightNode.position = Offset(xPos + laneOffset - rightNode.size.width / 2, branchY);
-        visited.add(children[1]); 
-
-        currentY = branchY + leftNode.size.height + verticalGap;
-
-        final leftChildren = adjacency[children[0]] ?? [];
-        final rightChildren = adjacency[children[1]] ?? [];
-
-        if (leftChildren.isNotEmpty && rightChildren.isNotEmpty && leftChildren.first == rightChildren.first) {
-          walk(leftChildren.first, xPos);
-        } else {
-          for (var childId in leftChildren) {
-            walk(childId, xPos - laneOffset);
-          }
-          for (var childId in rightChildren) {
-            walk(childId, xPos + laneOffset);
-          }
-        }
-      } else if (children.length > 2) {
-        double totalWidth = (children.length - 1) * laneOffset;
-        double startX = xPos - totalWidth / 2;
-        double branchY = currentY;
-        for (int i = 0; i < children.length; i++) {
-          final child = nodeMap[children[i]]!;
-          child.position = Offset(startX + i * laneOffset - child.size.width / 2, branchY);
-          visited.add(children[i]);
-        }
-        currentY = branchY + (nodeMap[children[0]]?.size.height ?? 60) + verticalGap;
-      }
-    }
-
-    walk(root.id, centerX);
-
-    // Position any remaining unvisited / orphan flowchart nodes sequentially along the main axis
-    for (var node in mindMapData.nodes) {
-      if (!visited.contains(node.id)) {
-        node.position = Offset(centerX - node.size.width / 2, currentY);
-        currentY += node.size.height + verticalGap;
-        visited.add(node.id);
-      }
-    }
-
     _normalizePositions(mindMapData.nodes, 100, 80);
   }
 

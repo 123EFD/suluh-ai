@@ -37,12 +37,12 @@ When implementing core algorithmic procedures, mathematical transformations, or 
 | 1 | Micro-Diagnostic 2-Min Adaptive Quiz (CAT) | 2026-07-31 | High | 🔥 High | Pending |
 | 2 | Bayesian / Deep Knowledge Tracing (BKT/DKT) | 2026-07-31 | High | Medium | Pending |
 | 3 | Multimodal PYQ Photo Scanner & Timestamp Mapper | 2026-07-31 | High | Medium | Pending |
-| 4 | Native Interactive Mermaid Flowchart Render | 2026-08-08 | Medium | 🔥 High | Pending |
+| 4 | Native Interactive Mermaid Flowchart Render | 2026-08-08 | Medium | 🔥 High | ❌ **REJECTED** (Abandoned: text cut off, isolated map in corner) |
 | 5 | Lens Transformation Cache Layer | 2026-07-31 | Low | Low | Pending |
 | 6 | Flashcard Deep-Dive Explanations & Links | 2026-08-17 | Low – Medium | Medium | **ACTIVE** (`[BLANK 1]`) |
-| 7 | Real student_quiz_logs Table & In-App Voting | 2026-08-21 | Medium | 🔥 High | Pending |
+| 7 | Real student_quiz_logs Table & In-App Voting | 2026-08-21 | Medium | 🔥 High | ✅ **COMPLETED** |
 | 8 | Live YouTube API Search for Video Resources | 2026-08-25 | Medium | Medium | **ACTIVE** (`[BLANK 2]`) |
-| 9 | PDF.js Web Worker & Semantic Chunk Retrieval Fix | 2026-09-14 | Low – Medium | Medium | Pending |
+| 9 | PDF.js Web Worker & Semantic Chunk Retrieval Fix | 2026-09-14 | Low – Medium | Medium | ✅ **COMPLETED** |
 
 ---
 

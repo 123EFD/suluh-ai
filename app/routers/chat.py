@@ -1,4 +1,6 @@
 import os
+import re
+import pymupdf as fitz
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from app.core.config import GROQ_API_KEY, UPLOAD_FOLDER
@@ -41,57 +43,104 @@ def ask_pdf_question(request: ChatRequest):
         embedder = get_embedder()
         question_vector = str(embedder.encode(optimized_query).tolist())
         
-        # 3. Hybrid pgvector + tsvector retrieval
+        # 3. Hybrid pgvector + tsvector retrieval with local fallback
         retrieved_text = ""
         chat_history_payload = []
-        
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT role, message_text 
-                    FROM chat_messages 
-                    WHERE filename = %s 
-                    ORDER BY id DESC 
-                    LIMIT 4
-                    """,
-                    (request.filename,)
-                )
-                past_messages = cur.fetchall()
-                for row in reversed(past_messages):
-                    db_role = row[0] 
-                    llm_role = "assistant" if db_role == "ai" else "user" 
-                    chat_history_payload.append({"role": llm_role, "content": row[1]})
-                
-                cur.execute(
-                    """
-                    SELECT chunk_text 
-                    FROM document_chunks
-                    WHERE document_name = %s
-                    ORDER BY 
-                        ((1.0 - (embedding <=> %s::vector)) * 0.7) 
-                        + 
-                        (ts_rank(to_tsvector('english', chunk_text), plainto_tsquery('english', %s)) * 0.3)
-                    DESC
-                    LIMIT 30 
-                    """,
-                    (request.filename, question_vector, optimized_query)
-                )
-                rows = cur.fetchall()
-        
-        # 4. Cross-Encoder Re-Ranking
+        rows = []
+        file_path = os.path.join(UPLOAD_FOLDER, request.filename)
+        safe_tsquery = re.sub(r'[^\w\s]', ' ', optimized_query).strip() or optimized_query
+
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT role, message_text 
+                        FROM chat_messages 
+                        WHERE filename = %s 
+                        ORDER BY id DESC 
+                        LIMIT 4
+                        """,
+                        (request.filename,)
+                    )
+                    past_messages = cur.fetchall()
+                    for row in reversed(past_messages):
+                        db_role = row[0] 
+                        llm_role = "assistant" if db_role == "ai" else "user" 
+                        chat_history_payload.append({"role": llm_role, "content": row[1]})
+                    
+                    cur.execute(
+                        """
+                        SELECT chunk_text 
+                        FROM document_chunks
+                        WHERE document_name = %s
+                        ORDER BY 
+                            ((1.0 - (embedding <=> %s::vector)) * 0.7) 
+                            + 
+                            (ts_rank(to_tsvector('english', chunk_text), plainto_tsquery('english', %s)) * 0.3)
+                        DESC
+                        LIMIT 30 
+                        """,
+                        (request.filename, question_vector, safe_tsquery)
+                    )
+                    rows = cur.fetchall()
+        except Exception as db_err:
+            print(f"Notice: Remote vector DB retrieval skipped/failed ({db_err}). Falling back to local semantic reader.")
+            rows = []
+
+        # Fallback to local PDF semantic search if DB returned 0 chunks
+        if not rows and os.path.exists(file_path):
+            try:
+                with fitz.open(file_path) as doc:
+                    candidate_chunks = []
+                    for page_idx, page in enumerate(doc):
+                        page_text = page.get_text("text").strip()
+                        if not page_text:
+                            continue
+                        paragraphs = [p.strip() for p in page_text.split("\n\n") if len(p.strip()) > 30]
+                        if not paragraphs:
+                            paragraphs = [page_text]
+                        for para in paragraphs:
+                            candidate_chunks.append(f"[Page {page_idx + 1}]\n{para}")
+                    
+                    if candidate_chunks:
+                        chunk_embeddings = embedder.encode(candidate_chunks[:60])
+                        q_emb = embedder.encode(optimized_query)
+                        sims = [
+                            float((chunk_embeddings[i] @ q_emb) / (
+                                (chunk_embeddings[i] @ chunk_embeddings[i])**0.5 * (q_emb @ q_emb)**0.5 + 1e-9
+                            ))
+                            for i in range(len(chunk_embeddings))
+                        ]
+                        ranked_indices = sorted(range(len(sims)), key=lambda k: sims[k], reverse=True)[:30]
+                        rows = [(candidate_chunks[idx],) for idx in ranked_indices]
+            except Exception as pdf_err:
+                print(f"Local PDF semantic extraction error: {pdf_err}")
+
+        # 4. Cross-Encoder Re-Ranking & Semantic Coalescing
         if rows:
             cross_encoder = get_cross_encoder()
-            sentence_pairs = [[optimized_query, row[0]] for row in rows]
+            candidate_texts = [row[0] for row in rows]
+            sentence_pairs = [[optimized_query, t] for t in candidate_texts]
             scores = cross_encoder.predict(sentence_pairs)
-            scored_results = list(zip(scores, [row[0] for row in rows]))
+            scored_results = list(zip(scores, candidate_texts))
             scored_results.sort(key=lambda x: x[0], reverse=True)
             top_results = scored_results[:12]
-            for i, (score, chunk_text) in enumerate(top_results):
+
+            # Coalesce overlapping/duplicate excerpts and maintain semantic boundary continuity
+            coalesced_excerpts = []
+            seen_texts = set()
+            for score, chunk_text in top_results:
+                clean_chunk = chunk_text.strip()
+                if not clean_chunk or any(clean_chunk in s for s in seen_texts):
+                    continue
+                seen_texts.add(clean_chunk)
+                coalesced_excerpts.append(clean_chunk)
+
+            for i, chunk_text in enumerate(coalesced_excerpts):
                 retrieved_text += f"\n--- Excerpt {i+1} ---\n{chunk_text}\n"
 
         # 5. Direct Page Range Extraction
-        file_path = os.path.join(UPLOAD_FOLDER, request.filename)
         direct_page_texts = extract_direct_page_texts(file_path, request.question)
         if direct_page_texts:
             retrieved_text = "\n\n".join(direct_page_texts) + "\n\n" + retrieved_text

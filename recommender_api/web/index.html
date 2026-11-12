@@ -31,9 +31,24 @@
 
   <title>recommender_api</title>
   <link rel="manifest" href="manifest.json">
-  <script src="//cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
   <script type="text/javascript">
-    pdfjsLib.GlobalWorkerOptions.workerSrc = "//cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js";
+    // Robust Web Worker initialization with cross-origin Blob fallback shim
+    (function() {
+      try {
+        var workerUrl = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js";
+        var blob = new Blob(
+          ['importScripts("' + workerUrl + '");'],
+          { type: "application/javascript" }
+        );
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
+      } catch (e) {
+        console.warn("PDF.js Blob Worker fallback active:", e);
+        if (window.pdfjsLib) {
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js";
+        }
+      }
+    })();
   </script>
 </head>
 <body>

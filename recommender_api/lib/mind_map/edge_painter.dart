@@ -65,7 +65,7 @@ class EdgePainter extends CustomPainter {
           //straight line for bubble and concept maps
           canvas.drawLine(start, end, paint);
         } else {
-          //curve lines using cubic bezier for hierarchical and flowchart:
+          //curve lines using cubic bezier for hierarchical maps:
           final path = Path()
             ..moveTo(start.dx, start.dy)
             ..cubicTo(start.dx, start.dy + 40, end.dx, end.dy - 40, end.dx, end.dy);
