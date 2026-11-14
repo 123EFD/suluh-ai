@@ -15,6 +15,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'services/bundler_state.dart';
+import 'services/api_config.dart';
 import 'screens/bundler_setup_screen.dart';
 
 void main() {
@@ -457,8 +458,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
     };
 
     try {
-      // Target LOCAL backend to test the new DAG algorithm!
-      final url = Uri.parse('http://localhost:8000/predict');
+      final url = Uri.parse('${ApiConfig.baseUrl}/predict');
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
@@ -880,7 +880,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
               ),
               Expanded(
                 child: FutureBuilder<http.Response>(
-                  future: http.get(Uri.parse('http://localhost:8000/api/heatmap')), // Target LOCAL backend
+                  future: http.get(Uri.parse('${ApiConfig.baseUrl}/api/heatmap')),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const Center(
@@ -1751,7 +1751,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
 
     try {
       final res = await http.post(
-        Uri.parse("http://127.0.0.1:8000/api/rate-resource"),
+        Uri.parse("${ApiConfig.baseUrl}/api/rate-resource"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "resource_id": resource['id']?.toString() ?? resource['title'].toString(),
@@ -1781,7 +1781,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
       context: context,
       builder: (dialogCtx) {
         return FutureBuilder<http.Response>(
-          future: http.get(Uri.parse("http://127.0.0.1:8000/api/heatmap")),
+          future: http.get(Uri.parse("${ApiConfig.baseUrl}/api/heatmap")),
           builder: (context, snapshot) {
             List<dynamic> items = [];
             if (snapshot.hasData && snapshot.data!.statusCode == 200) {

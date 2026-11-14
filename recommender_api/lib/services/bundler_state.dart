@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'api_config.dart';
 import '../models/resource_item.dart'; // We will create this model next
 
 class BundlerState extends ChangeNotifier {
@@ -16,7 +17,7 @@ class BundlerState extends ChangeNotifier {
 
     try {
       final response = await http.post(
-        Uri.parse("http://localhost:8000/bundler/create"),
+        Uri.parse("${ApiConfig.baseUrl}/bundler/create"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({"minutes_available": minutes, "topic": topic}),
       );

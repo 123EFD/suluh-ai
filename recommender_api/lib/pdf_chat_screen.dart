@@ -12,6 +12,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'theme/glassmorphism.dart';
 import 'theme/app_theme.dart';
+import 'services/api_config.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 
 class CustomLatexElementBuilder extends MarkdownElementBuilder {
@@ -140,7 +141,7 @@ class PdfChatScreen extends StatefulWidget {
 
 class _PdfChatScreenState extends State<PdfChatScreen> with TickerProviderStateMixin {
   List<String> _pdfLibrary = [];
-  final String _baseUrl = "http://localhost:8000"; // Test local backend
+  String get _baseUrl => ApiConfig.baseUrl;
 
   Uint8List? _pdfBytes;
   String _pdfName = "";

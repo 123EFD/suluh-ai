@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../models/resource_item.dart';
 import '../services/bundler_state.dart';
+import '../services/api_config.dart';
 import '../pdf_chat_screen.dart';
 import 'study_session_screen.dart';
 import '../main.dart';
@@ -135,7 +136,7 @@ class PdfFocusDiagnosticScreen extends StatefulWidget {
 }
 
 class _PdfFocusDiagnosticScreenState extends State<PdfFocusDiagnosticScreen> {
-  final String _baseUrl = "http://localhost:8000";
+  String get _baseUrl => ApiConfig.baseUrl;
 
   late String _selectedCourseCode;
   late TextEditingController _gradeController;

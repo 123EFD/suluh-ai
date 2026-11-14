@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:google_fonts/google_fonts.dart';
 import '../models/resource_item.dart';
+import '../services/api_config.dart';
 import '../theme/app_theme.dart';
 
 import 'dart:typed_data';
@@ -31,7 +32,7 @@ class _PyqSolutionWidgetState extends State<PyqSolutionWidget> {
     });
 
     try {
-      final url = Uri.parse('http://localhost:8000/lens/transform');
+      final url = Uri.parse('${ApiConfig.baseUrl}/lens/transform');
       final body = jsonEncode({
         "source_text": widget.item.content,
         "lens": lensType

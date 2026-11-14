@@ -12,25 +12,22 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Python packages using uv as root before switching user (ensures write permissions and layer caching)
+WORKDIR /app
+COPY requirements.txt /app/requirements.txt
+RUN uv pip install --system --no-cache -r /app/requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+
 # Hugging Face requires apps to run as a non-root user for security
 RUN useradd -m -u 1000 user
+ENV HOME=/home/user \
+    PATH=/home/user/.local/bin:$PATH
+
+# Copy files and set ownership
+COPY --chown=user:user . /app
+RUN sed -i -e 's/\r$//' /app/start.sh && chmod +x /app/start.sh
+RUN mkdir -p /app/uploads && chown -R user:user /app/uploads
+
 USER user
-ENV PATH="/home/user/.local/bin:$PATH"
-
-# Set the working directory
-WORKDIR /app
-
-# Copy your files into the container
-COPY --chown=user . /app
-
-# Make the startup script executable and ensure Unix line endings
-RUN sed -i -e 's/\r$//' start.sh && chmod +x start.sh
-
-# Install Python packages using uv for 10x-100x faster layer caching & resolution
-RUN uv pip install --system --no-cache -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
-
-# Create the uploads folder just in case
-RUN mkdir -p uploads
 
 # Expose the Hugging Face port
 EXPOSE 7860

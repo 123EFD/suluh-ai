@@ -1,3 +1,7 @@
+const API_BASE = (window.location.origin && window.location.origin !== "null" && !window.location.origin.startsWith("file://"))
+    ? window.location.origin
+    : "http://127.0.0.1:8000";
+
 document.getElementById('predictionForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     
@@ -19,7 +23,7 @@ document.getElementById('predictionForm').addEventListener('submit', async (e) =
     };
 
     try {
-        const response = await fetch('http://127.0.0.1:8000/predict', {
+        const response = await fetch(`${API_BASE}/predict`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(studentData)
@@ -186,9 +190,9 @@ async function handlePDFUpload(event) {
     try {
         if (fileInput.files.length > 0) {
             formData.append('file', fileInput.files[0]);
-            response = await fetch('http://127.0.0.1:8000/upload-pdf', { method: 'POST', body: formData });
+            response = await fetch(`${API_BASE}/upload-pdf`, { method: 'POST', body: formData });
         } else {
-            response = await fetch('http://127.0.0.1:8000/analyze-pdf-url', {
+            response = await fetch(`${API_BASE}/analyze-pdf-url`, {
                 method: 'POST',
                 headers : { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url: urlInput.value })
@@ -229,7 +233,7 @@ async function askQuestion() {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 
     try {
-        const response = await fetch('http://127.0.0.1:8000/chat', {
+        const response = await fetch(`${API_BASE}/chat`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -286,7 +290,7 @@ overlay.addEventListener('click', () => {
 // 2. Fetch and Display Library
 async function refreshLibrary() {
     try {
-        const response = await fetch('http://127.0.0.1:8000/library');
+        const response = await fetch(`${API_BASE}/library`);
         const files = await response.json();
         
         if (files.length === 0) {
@@ -340,7 +344,7 @@ async function generateBundle() {
     resultsContainer.innerHTML = "<p>⏳ Curating your study bundle...</p>";
 
     try {
-        const response = await fetch("http://127.0.0.1:8000/bundler/create", {
+        const response = await fetch(`${API_BASE}/bundler/create`, {
             method : "POST",
             headers : {
                 "Content-Type" : "application/json"
