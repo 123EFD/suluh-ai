@@ -237,6 +237,7 @@ Dynamic memory allocation uses malloc and free.
         self.assertEqual(cache_manager.get("test_lens", test_key), "cached_metaphor_output")
 
         # 2. Test get_or_set pattern
+        cache_manager.delete("test_lens", "factory_key")
         computed_calls = 0
         def factory():
             nonlocal computed_calls
@@ -250,6 +251,7 @@ Dynamic memory allocation uses malloc and free.
         second_res = cache_manager.get_or_set("test_lens", "factory_key", 30, factory)
         self.assertEqual(second_res, "factory_computed_val")
         self.assertEqual(computed_calls, 1)  # Cached, factory not invoked again
+        cache_manager.delete("test_lens", "factory_key")
 
         # 3. Test delete
         cache_manager.delete("test_lens", test_key)
