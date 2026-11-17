@@ -278,7 +278,7 @@ To transition this academic prototype into an enterprise-ready, production-grade
 | **13** | **Lens Transformation LRU + TTL Cache** | Performance & Caching | ✅ **Completed** | Sentinel dummy node fix (`KeyError: ''` resolved), deterministic MD5 hashing (`usedforsecurity=False`), 100% test pass. |
 | **-** | **Bandit SAST B324 Security Fix** | Application Security | 🛡️ **Remediated** | Addressed weak MD5 hash finding using `usedforsecurity=False`. 0 Bandit high/medium findings. |
 | **-** | **Deep Knowledge Tracing (DKT)** | ML / AI Roadmap | 📋 **Future** | Recurrent neural network (LSTM/Transformer) for multi-skill interaction modeling. |
-| **-** | **Distributed Redis Cache Layer** | Infrastructure Roadmap | 📋 **Future** | Shared caching across multi-worker and containerized deployments. |
+| **-** | **Distributed Redis Cache Layer** | Infrastructure & Caching | ✅ **Completed** | UnifiedCacheManager Two-Tier L1/L2 engine with circuit breaker failover; migrated lens, RAG Q&A, and YouTube API. |
 | **-** | **Cloud Object Storage (S3 / R2)** | Storage Roadmap | 📋 **Future** | Permanent cloud blob storage to eliminate ephemeral storage data loss on cloud restarts. |
 | **-** | **Magic Byte MIME Validation** | Security Roadmap | 📋 **Future** | Binary header validation for uploaded PDF textbooks and PYQ exam photos. |
 | **-** | **Topological DAG Sorting in `/predict`** | Core Algorithm Roadmap | 📋 **Future** | Kahn's algorithm ordering for recommended foundational course paths. |

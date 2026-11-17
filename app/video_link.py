@@ -4,6 +4,7 @@ import time
 import requests
 from typing import List, Dict, Optional, Any
 from dotenv import load_dotenv
+from app.core.cache import cache_manager
 
 load_dotenv()
 
@@ -82,8 +83,9 @@ def rank_and_cache_video_selection(topic: str, candidates: List[Dict[str, Any]])
         "timestamp": time.time()
     }
     
-    # Cache result
+    # Cache result in L1 and L2 distributed Redis
     _YOUTUBE_CACHE[norm_topic] = result
+    cache_manager.set("youtube", norm_topic, result, ttl_seconds=CACHE_TTL_SECONDS)
     return result
 
 def search_youtube_live(topic: str) -> Optional[Dict[str, Any]]:
@@ -93,8 +95,8 @@ def search_youtube_live(topic: str) -> Optional[Dict[str, Any]]:
     """
     norm_topic = topic.strip().lower()
 
-    # 1. Check in-memory Cache-Aside with TTL
-    cached = _YOUTUBE_CACHE.get(norm_topic)
+    # 1. Check Two-Tier Cache-Aside (L1 Local + L2 Distributed Redis)
+    cached = cache_manager.get("youtube", norm_topic) or _YOUTUBE_CACHE.get(norm_topic)
     if cached and (time.time() - cached.get("timestamp", 0) < CACHE_TTL_SECONDS):
         return cached
 

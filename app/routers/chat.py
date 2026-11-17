@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from app.core.config import GROQ_API_KEY, UPLOAD_FOLDER
 from app.core.database import get_db_connection
+from app.core.cache import cache_manager
 from app.models.schemas import ChatRequest, MessageRequest
 from app.services.llm_service import (
     get_groq_client,
@@ -24,10 +25,11 @@ def ask_pdf_question(request: ChatRequest):
         raise HTTPException(status_code=500, detail="GROQ API Key is missing.")
     
     cache_key = generate_cache_key(request.filename, request.question)
-    if cache_key in question_cache:
-        print("⚡ Cache hit! Returning instant answer.")
+    cached_answer = cache_manager.get("rag_qa", cache_key) or question_cache.get(cache_key)
+    if cached_answer:
+        print("⚡ Cache hit! Returning instant answer from distributed cache.")
         def cached_stream():
-            yield question_cache[cache_key]
+            yield cached_answer
         return StreamingResponse(cached_stream(), media_type="text/plain")
     
     client = get_groq_client()
@@ -221,6 +223,7 @@ def ask_pdf_question(request: ChatRequest):
 
                 if full_answer:
                     question_cache[cache_key] = full_answer
+                    cache_manager.set("rag_qa", cache_key, full_answer, ttl_seconds=86400)
                     try:
                         with get_db_connection() as conn:
                             with conn.cursor() as db_cur:

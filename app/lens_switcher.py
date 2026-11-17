@@ -27,17 +27,19 @@ Given a piece of academic text, output ONE of the following lenses **exactly** a
 Do NOT add any explanations, headings, or extra text. Do NOT wrap the output in markdown code blocks or backticks. Return *only* the requested content."""
 
 try:
-    from app.lens_cache import lens_cache
+    from app.core.cache import cache_manager
 except ModuleNotFoundError:
-    lens_cache = importlib.import_module("lens_cache").lens_cache
+    import importlib
+    cache_manager = importlib.import_module("core.cache").cache_manager
 
 @router.post("/transform", response_model=LensResponse)
 def transform(req: LensRequest):
     if req.lens not in {"analogy", "visual", "exam"}:
         raise HTTPException(status_code=400, detail="Invalid lens type. Must be 'analogy', 'visual', or 'exam'.")
     
-    # Check LRU TTL Cache first
-    cached = lens_cache.get(req.lens, "academic", req.source_text)
+    # Check Two-Tier Cache (L1 LRU + L2 Distributed Redis)
+    cache_key = f"{req.lens}:{req.source_text}"
+    cached = cache_manager.get("lens", cache_key)
     if cached:
         return LensResponse(transformed=cached)
     
@@ -54,5 +56,5 @@ def transform(req: LensRequest):
         raise HTTPException(status_code=500, detail=f"Transformation failed: {str(e)}")
     
     cleaned = result.strip()
-    lens_cache.put(req.lens, "academic", req.source_text, cleaned)
+    cache_manager.set("lens", cache_key, cleaned, ttl_seconds=604800)
     return LensResponse(transformed=cleaned)

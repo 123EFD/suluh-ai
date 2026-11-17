@@ -227,5 +227,39 @@ Dynamic memory allocation uses malloc and free.
         already_uri = "data:image/png;base64,12345"
         self.assertEqual(normalize_base64_image(already_uri), already_uri)
 
+    def test_unified_two_tier_cache(self):
+        """Verify Two-Tier L1/L2 UnifiedCacheManager, get_or_set, and circuit breaker fallback."""
+        from app.core.cache import cache_manager, UnifiedCacheManager
+
+        # 1. Test active cache_manager operations
+        test_key = "unit_test_lens_key"
+        cache_manager.set("test_lens", test_key, "cached_metaphor_output", ttl_seconds=30)
+        self.assertEqual(cache_manager.get("test_lens", test_key), "cached_metaphor_output")
+
+        # 2. Test get_or_set pattern
+        computed_calls = 0
+        def factory():
+            nonlocal computed_calls
+            computed_calls += 1
+            return "factory_computed_val"
+
+        first_res = cache_manager.get_or_set("test_lens", "factory_key", 30, factory)
+        self.assertEqual(first_res, "factory_computed_val")
+        self.assertEqual(computed_calls, 1)
+
+        second_res = cache_manager.get_or_set("test_lens", "factory_key", 30, factory)
+        self.assertEqual(second_res, "factory_computed_val")
+        self.assertEqual(computed_calls, 1)  # Cached, factory not invoked again
+
+        # 3. Test delete
+        cache_manager.delete("test_lens", test_key)
+        self.assertIsNone(cache_manager.get("test_lens", test_key))
+
+        # 4. Test offline circuit breaker and graceful L1 fallback
+        offline_cache = UnifiedCacheManager(redis_url="redis://localhost:9999/0", circuit_cooldown_seconds=1.0)
+        self.assertFalse(offline_cache.is_redis_available())
+        offline_cache.set("fallback_ns", "key1", "l1_stored_value", ttl_seconds=60)
+        self.assertEqual(offline_cache.get("fallback_ns", "key1"), "l1_stored_value")
+
 if __name__ == "__main__":
     unittest.main()

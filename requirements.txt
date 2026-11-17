@@ -20,3 +20,4 @@ torch
 joblib
 scikit-learn
 numpy
+redis>=5.0.0
